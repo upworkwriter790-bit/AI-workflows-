@@ -28,6 +28,7 @@ SKILLS=(
     "n8n-node-configuration"
     "n8n-code-javascript"
     "n8n-code-python"
+    "n8n-code-tool"
 )
 
 for skill in "${SKILLS[@]}"; do

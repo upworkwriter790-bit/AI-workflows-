@@ -9,7 +9,7 @@
     {
       "name": "n8n-mcp-skills",
       "source": "./",
-      "description": "Complete bundle: 7 expert skills for building flawless n8n workflows using n8n-mcp MCP server. Includes skills for expression syntax, MCP tools usage, workflow patterns, validation, node configuration, JavaScript code, and Python code.",
+      "description": "Complete bundle: 8 expert skills for building flawless n8n workflows using n8n-mcp MCP server. Includes skills for expression syntax, MCP tools usage, workflow patterns, validation, node configuration, JavaScript code, Python code, and the AI-agent Custom Code Tool.",
       "version": "1.6.0",
       "author": {
         "name": "Romuald Członkowski",

@@ -14,7 +14,7 @@
 
 ## 🎯 What is this?
 
-This repository contains **7 complementary Claude Code skills** that teach AI assistants how to build production-ready n8n workflows using the [n8n-mcp](https://github.com/czlonkowski/n8n-mcp) MCP server.
+This repository contains **8 complementary Claude Code skills** that teach AI assistants how to build production-ready n8n workflows using the [n8n-mcp](https://github.com/czlonkowski/n8n-mcp) MCP server.
 
 ### Why These Skills Exist
 
@@ -33,7 +33,7 @@ These skills solve these problems by teaching Claude:
 
 ---
 
-## 📚 The 7 Skills
+## 📚 The 8 Skills
 
 ### 1. **n8n Expression Syntax**
 Teaches correct n8n expression syntax and common patterns.
@@ -121,6 +121,20 @@ Write Python code in n8n Code nodes with proper limitations awareness.
 - Workarounds for missing libraries
 - Common Python patterns for n8n
 
+### 8. **n8n Code Tool**
+Write code for the AI-agent-callable Custom Code Tool (`@n8n/n8n-nodes-langchain.toolCode`) — a different node from the regular Code node with a different contract.
+
+**Activates when**: Building a Code Tool attached to an AI Agent, troubleshooting "Wrong output type returned" or "No execution data available" errors, deciding between unstructured `query` parsing and `specifyInputSchema`.
+
+**Key Features**:
+- **Critical distinction**: Code Tool ≠ Code node (different node type, different return format, different sandbox)
+- **Return format**: a **string** (use `JSON.stringify()` for structured output) — NOT `[{json:{...}}]`
+- **Input binding**: `query` (JS) / `_query` (Python) — `$fromAI()` does NOT work here
+- Unstructured vs structured input modes (`specifyInputSchema` → DynamicStructuredTool)
+- Sandbox limits: no `$input`, `$helpers`, `$json`, `$getWorkflowStaticData`, no state across calls
+- Three signature error strings with causes and fixes
+- When to use Code Tool vs `toolWorkflow` vs HTTP Request Tool
+
 ---
 
 ## 🚀 Installation
@@ -198,6 +212,9 @@ Skills activate **automatically** when relevant queries are detected:
 
 "Can I use pandas in Python Code node?"
 → Activates: n8n Code Python
+
+"Why does my Code Tool throw 'Wrong output type returned'?"
+→ Activates: n8n Code Tool
 ```
 
 ### Skills Work Together
@@ -276,7 +293,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📊 What's Included
 
-- **7** complementary skills that work together
+- **8** complementary skills that work together
 - **525+** n8n nodes supported
 - **2,653+** workflow templates for examples
 - **10** production-tested Code node patterns
