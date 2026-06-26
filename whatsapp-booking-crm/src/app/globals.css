@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #101814;
+  --color-ink-soft: #5a6b62;
+  --color-line: #e3e8e4;
+  --color-paper: #f6f8f6;
+  --color-accent: #0d8a64;
+  --color-accent-ink: #0a6b4e;
+  --color-accent-wash: #e7f5ef;
+  --color-warn: #b54708;
+  --color-warn-wash: #fff4ec;
+  --color-wa-bg: #0b141a;
+  --color-wa-in: #202c33;
+  --color-wa-out: #005c4b;
+  --color-wa-head: #1f2c33;
+  --color-wa-text: #e9edef;
+  --color-wa-sub: #8696a0;
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color: var(--color-ink);
+  background:
+    radial-gradient(1200px 600px at 85% -10%, #eef5f1 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, #eef3f6 0%, transparent 55%),
+    var(--color-paper);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Chat typing dots */
+@keyframes blink {
+  0%, 60%, 100% { opacity: 0.3; }
+  30% { opacity: 1; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+.bubble-pop { animation: pop 0.18s ease-out; }
+.dot-blink { animation: blink 1s infinite; }
+
+/* Thin scrollbars in chat */
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 3px; }

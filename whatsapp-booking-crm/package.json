@@ -1,0 +1,31 @@
+{
+  "name": "whatsapp-booking-crm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-vertical WhatsApp booking automation — fill in your business details and a WhatsApp agent runs interactive booking conversations for clinics, dental, salons, hotels, restaurants, retail, travel and more.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "next": "16.2.7",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
