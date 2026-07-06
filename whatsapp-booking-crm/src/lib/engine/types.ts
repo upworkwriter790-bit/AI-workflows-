@@ -64,6 +64,8 @@ export interface BusinessHours {
 
 export interface BusinessProfile {
   id?: string;
+  /** Meta WhatsApp phone-number ID this business receives messages on (routing). */
+  phoneNumberId?: string;
   type: VerticalKey;
   brand: string;
   agentName: string;

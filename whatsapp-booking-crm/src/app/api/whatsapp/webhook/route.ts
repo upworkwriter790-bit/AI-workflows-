@@ -13,6 +13,7 @@ import {
   verifyWebhookSignature,
 } from "@/lib/whatsapp/meta-client";
 import { handleIncoming } from "@/services/conversation";
+import { appendHistory, getProfileByPhoneId, isPaused, upsertContact } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -69,12 +70,29 @@ export async function POST(req: NextRequest) {
     for (const entry of entries) {
       const changes = (entry as { changes?: unknown[] })?.changes ?? [];
       for (const change of changes) {
-        const value = (change as { value?: { messages?: WaMessage[] } })?.value;
+        const value = (change as {
+          value?: { messages?: WaMessage[]; metadata?: { phone_number_id?: string } };
+        })?.value;
         const messages = value?.messages ?? [];
+        if (!messages.length) continue;
+
+        // Route to the business that owns this WhatsApp number.
+        const phoneNumberId = value?.metadata?.phone_number_id ?? "";
+        const matched = phoneNumberId ? await getProfileByPhoneId(phoneNumberId) : null;
+        const profileId = matched?.id ?? "default";
+
         for (const msg of messages) {
           const text = extractText(msg);
           if (!text) continue;
-          const result = await handleIncoming({ phone: msg.from, text });
+
+          // Human takeover: record the inbound message but let the agent reply.
+          if (await isPaused(msg.from, profileId)) {
+            await upsertContact(msg.from, profileId);
+            await appendHistory(msg.from, { role: "user", content: text }, profileId);
+            continue;
+          }
+
+          const result = await handleIncoming({ phone: msg.from, text, profileId });
           if (result.reply) await sendWhatsAppText(msg.from, result.reply);
         }
       }

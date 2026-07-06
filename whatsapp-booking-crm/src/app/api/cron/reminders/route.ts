@@ -44,13 +44,13 @@ export async function GET(req: NextRequest) {
         b.fields.service ?? b.type,
       ]);
       await updateBookingStatus(b.id, "reminded");
-      await tagContact(b.contactPhone, "reminded");
+      await tagContact(b.contactPhone, "reminded", b.profileId);
       sent.push(b.id);
     }
 
     // Missed-appointment follow-up (same-day, still not attended)
     if (delta === 0 && (b.status === "confirmed" || b.status === "reminded")) {
-      await tagContact(b.contactPhone, "missed-appointment-watch");
+      await tagContact(b.contactPhone, "missed-appointment-watch", b.profileId);
       flagged.push(b.id);
     }
   }

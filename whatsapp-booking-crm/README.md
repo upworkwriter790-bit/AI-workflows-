@@ -16,6 +16,11 @@ so a booking flow *never* loses a field or hallucinates a confirmation.
 > in the phone mockup — no Meta account and no API keys required to test. What
 > you test locally is the exact engine that runs against live WhatsApp.
 
+**It's a full CRM, not just a bot:** manage **multiple businesses** in one
+deployment (each routed by its own WhatsApp number), a **shared inbox** with
+**one-click human takeover**, a live **dashboard**, a **settings/integrations**
+page, and an **admin login**.
+
 ---
 
 ## Why this design
@@ -65,6 +70,23 @@ customer | patient      | guest       | customer | traveller
 - Full test suite (`npm test`) covering all of the above.
 
 ---
+
+## Pages
+
+| Page | What it does |
+|------|--------------|
+| `/` **Builder** | Pick a vertical, fill in details, chat with the live agent, save it as a business (create/select/delete multiple), set its WhatsApp phone-number ID. |
+| `/inbox` **Shared inbox** | Live conversations per business; open a thread, reply manually to **take over** from the bot, or hand it back. |
+| `/dashboard` | Bookings, contacts, integration status per business. |
+| `/settings` | Integration status, the exact webhook URL to paste into Meta, per-business routing, go-live checklist, logout. |
+| `/login` | Admin sign-in (only when `ADMIN_PASSWORD` is set). |
+
+## Multiple businesses
+
+One deployment serves all your businesses (a clinic, a retreat, a shop…). Each
+is a saved `BusinessProfile` with its own `phoneNumberId`. Inbound WhatsApp
+messages are routed to the right business by the `phone_number_id` in the Meta
+webhook payload, so every business gets its own agent, inbox and bookings.
 
 ## Quick start (zero config)
 
@@ -134,14 +156,21 @@ src/
 ├── services/
 │   ├── ai-service.ts    Gemini 1.5 → Gemini 2.0 → OpenAI, circuit breaker
 │   └── conversation.ts  orchestrator: FSM ⊕ AI, persistence, sync, tagging
+├── middleware.ts        admin auth gate (active when ADMIN_PASSWORD is set)
+├── lib/auth.ts          session cookie (salted SHA-256, Web Crypto)
 ├── app/
-│   ├── page.tsx         the Builder (config + live phone simulator)
+│   ├── page.tsx         the Builder (multi-business config + phone simulator)
+│   ├── inbox/           shared inbox + human takeover
 │   ├── dashboard/       bookings, contacts, integration status
+│   ├── settings/        integrations, webhook URL, go-live checklist
+│   ├── login/           admin sign-in
 │   └── api/
-│       ├── whatsapp/webhook/  GET verify + POST inbound
+│       ├── whatsapp/webhook/  GET verify + POST inbound (routes by phone id)
 │       ├── simulate/          stateless engine for the simulator
-│       ├── profile/           get/save the active business
-│       ├── dashboard/         data feed
+│       ├── profile/           list/get/create/delete businesses
+│       ├── inbox/             list · thread · reply · pause (takeover)
+│       ├── dashboard/         data feed (per business)
+│       ├── auth/              login · logout
 │       ├── cron/reminders/    T-24h reminders + missed follow-up
 │       └── broadcast/         template campaign to a tagged segment
 └── scripts/google-apps-script.gs   Sheets + Calendar web app
@@ -160,7 +189,7 @@ src/
 | STOP opt-out | engine + orchestrator suppress + tag `opted-out` |
 | Cancellation / reschedule | structured `CANCEL` capture → human handoff |
 | Broadcast campaign | `POST /api/broadcast` (segment by tag, suppress opt-outs) |
-| Agent handoff / escalation | `<<ESCALATE>>` + `needs-human` tag |
+| Agent handoff / escalation | `<<ESCALATE>>` + `needs-human` tag, or one-click **Take over** in the inbox |
 | Business-hours guardrail | `isOpenNow` + after-hours greeting/callback |
 | Multi-language | AI layer detects + replies in the customer's language |
 

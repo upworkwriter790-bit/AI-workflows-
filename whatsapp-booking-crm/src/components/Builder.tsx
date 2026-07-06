@@ -50,7 +50,19 @@ export default function Builder() {
   });
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [showPrompt, setShowPrompt] = useState(false);
+  const [businesses, setBusinesses] = useState<{ id: string; brand: string }[]>([]);
+  const [currentId, setCurrentId] = useState<string>("new");
   const chatRef = useRef<HTMLDivElement>(null);
+
+  const refreshBusinesses = useCallback(async () => {
+    try {
+      const r = await fetch("/api/profile");
+      const d = await r.json();
+      setBusinesses((d.businesses ?? []).map((b: BusinessProfile) => ({ id: b.id!, brand: b.brand })));
+    } catch {
+      /* offline / not saved yet */
+    }
+  }, []);
 
   const bp = BLUEPRINTS[profile.type];
   const systemPrompt = useMemo(() => generateSystemPrompt(profile), [profile]);
@@ -85,11 +97,39 @@ export default function Builder() {
 
   useEffect(() => {
     restart(profile);
+    refreshBusinesses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectType = (key: VerticalKey) => {
     const p = clone(PRESETS[key]);
+    setProfile(p);
+    restart(p);
+  };
+
+  const loadBusiness = async (id: string) => {
+    if (id === "new") {
+      setCurrentId("new");
+      const p = clone(PRESETS.dental);
+      setProfile(p);
+      restart(p);
+      return;
+    }
+    const r = await fetch(`/api/profile?id=${id}`);
+    const d = await r.json();
+    if (d.profile) {
+      setCurrentId(id);
+      setProfile(d.profile);
+      restart(d.profile);
+    }
+  };
+
+  const deleteBusiness = async () => {
+    if (currentId === "new" || currentId === "default") return;
+    await fetch(`/api/profile?id=${currentId}`, { method: "DELETE" });
+    setCurrentId("new");
+    await refreshBusinesses();
+    const p = clone(PRESETS.dental);
     setProfile(p);
     restart(p);
   };
@@ -138,11 +178,14 @@ export default function Builder() {
   const saveProfile = async () => {
     setSaveState("saving");
     try {
-      await fetch("/api/profile", {
+      const r = await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile }),
+        body: JSON.stringify({ profile, id: currentId === "new" ? undefined : currentId }),
       });
+      const d = await r.json();
+      if (d.id) setCurrentId(d.id);
+      await refreshBusinesses();
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 2000);
     } catch {
@@ -181,6 +224,28 @@ export default function Builder() {
             Your business
           </div>
           <div className="px-5 pb-5 pt-3">
+            {/* business selector */}
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-line bg-[#fbfcfb] p-2">
+              <select
+                value={currentId}
+                onChange={(e) => loadBusiness(e.target.value)}
+                className="flex-1 rounded-lg border border-line bg-white px-2.5 py-1.5 text-[13px]"
+              >
+                <option value="new">＋ New business…</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>{b.brand}</option>
+                ))}
+              </select>
+              {currentId !== "new" && currentId !== "default" && (
+                <button
+                  onClick={deleteBusiness}
+                  className="rounded-lg bg-[#f2f4f2] px-2.5 py-1.5 text-[13px] text-ink-soft hover:bg-[#fde8e4] hover:text-[#b42318]"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {VERTICAL_ORDER.map((k) => (
                 <button
@@ -217,6 +282,11 @@ export default function Builder() {
               onChange={(v) => patch({ providers: list(v) })}
             />
             <Field label="Address" value={profile.address ?? ""} onChange={(v) => patch({ address: v })} />
+            <Field
+              label="WhatsApp phone-number ID (Meta — for routing inbound msgs)"
+              value={profile.phoneNumberId ?? ""}
+              onChange={(v) => patch({ phoneNumberId: v })}
+            />
 
             {/* services */}
             <div className="mt-3">

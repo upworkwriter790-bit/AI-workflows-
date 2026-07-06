@@ -21,7 +21,7 @@ function authorized(req: NextRequest): boolean {
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return new NextResponse("Unauthorized", { status: 401 });
 
-  let body: { template?: string; tag?: string; language?: string; variables?: string[] };
+  let body: { template?: string; tag?: string; language?: string; variables?: string[]; business?: string };
   try {
     body = await req.json();
   } catch {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
   if (!body.template) return NextResponse.json({ error: "template required" }, { status: 400 });
 
-  const contacts = await listContacts();
+  const contacts = await listContacts(body.business || "default");
   const targets = contacts.filter(
     (c) => !c.optedOut && (!body.tag || c.tags.includes(body.tag)),
   );

@@ -28,8 +28,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="rounded-lg px-3 py-1.5 font-medium text-ink-soft hover:bg-accent-wash hover:text-accent-ink">
               Builder
             </Link>
+            <Link href="/inbox" className="rounded-lg px-3 py-1.5 font-medium text-ink-soft hover:bg-accent-wash hover:text-accent-ink">
+              Inbox
+            </Link>
             <Link href="/dashboard" className="rounded-lg px-3 py-1.5 font-medium text-ink-soft hover:bg-accent-wash hover:text-accent-ink">
               Dashboard
+            </Link>
+            <Link href="/settings" className="rounded-lg px-3 py-1.5 font-medium text-ink-soft hover:bg-accent-wash hover:text-accent-ink">
+              Settings
             </Link>
             <a
               href="https://developers.facebook.com/docs/whatsapp/cloud-api"

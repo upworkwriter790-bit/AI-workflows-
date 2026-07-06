@@ -84,7 +84,7 @@ export async function handleIncoming(input: HandleInput): Promise<HandleResult> 
   // START re-subscribes an opted-out contact.
   if (/^\s*start\s*$/i.test(input.text)) {
     if (!input.dryRun) {
-      await upsertContact(input.phone, { optedOut: false });
+      await upsertContact(input.phone, profileId, { optedOut: false });
       await resetSession(input.phone, profileId);
     }
     return { reply: "You're re-subscribed. How can I help you today?", session: newSession(), provider: "engine" };
@@ -168,32 +168,33 @@ async function persistTurn(
 ): Promise<void> {
   await saveSession(phone, result.session, profileId);
   await appendHistory(phone, { role: "user", content: userText }, profileId);
-  await appendHistory(phone, { role: "assistant", content: result.reply }, profileId);
+  await appendHistory(phone, { role: "assistant", content: result.reply, via: "bot" }, profileId);
 
-  const contact = await upsertContact(phone, { name: result.booking?.name });
+  const contact = await upsertContact(phone, profileId, { name: result.booking?.name });
 
   // First-time contact tag (Recipe A).
-  if (contact.tags.length === 0) await tagContact(phone, "new-lead");
+  if (contact.tags.length === 0) await tagContact(phone, "new-lead", profileId);
 
   if (result.optOut) {
-    await upsertContact(phone, { optedOut: true });
-    await tagContact(phone, "opted-out");
+    await upsertContact(phone, profileId, { optedOut: true });
+    await tagContact(phone, "opted-out", profileId);
   }
 
-  if (result.escalate) await tagContact(phone, "needs-human");
+  if (result.escalate) await tagContact(phone, "needs-human", profileId);
 
   if (result.booking) {
     const fields = result.booking;
     const rawDate = fields.date || fields.checkin || "";
     const forDate = rawDate ? normalizeDate(rawDate) : undefined;
     await logBooking({
+      profileId,
       contactPhone: phone,
       type: fields.type || profile.type,
       fields,
       status: "confirmed",
       forDate,
     });
-    await tagContact(phone, "appointment_confirmed");
+    await tagContact(phone, "appointment_confirmed", profileId);
     await syncToSheets({
       event: "booking",
       type: fields.type || profile.type,
@@ -205,7 +206,7 @@ async function persistTurn(
   }
 
   if (result.cancel) {
-    await tagContact(phone, "cancellation");
+    await tagContact(phone, "cancellation", profileId);
     await syncToSheets({
       event: "cancellation",
       type: profile.type,
