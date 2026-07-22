@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env / secrets
+.env
+
+# Runtime data (kept as .gitkeep placeholders, not the generated files)
+backend/data/*.json
+backend/data/*.corrupt.*
+backend/outputs/*.md
+backend/outputs/*.csv
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Editor
+.DS_Store
