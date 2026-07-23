@@ -16,6 +16,7 @@ import logging
 import os
 
 import anthropic
+import openai
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -58,6 +59,12 @@ async def anthropic_error_handler(request, exc: anthropic.APIError):
     return _json_error(502, f"The LLM provider returned an error: {exc}")
 
 
+@app.exception_handler(openai.APIError)
+async def openai_error_handler(request, exc: openai.APIError):
+    logger.error("openai/openrouter API error: %s", exc)
+    return _json_error(502, f"The LLM provider returned an error: {exc}")
+
+
 @app.exception_handler(Exception)
 async def unhandled_error_handler(request, exc: Exception):
     logger.exception("unhandled error on %s %s", request.method, request.url.path)
@@ -71,7 +78,12 @@ def _json_error(status_code: int, detail: str):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "model": config.DEFAULT_MODEL, "api_key_configured": bool(config.ANTHROPIC_API_KEY)}
+    return {
+        "status": "ok",
+        "provider": config.LLM_PROVIDER,
+        "model": config.DEFAULT_MODEL,
+        "api_key_configured": bool(config.configured_api_key()),
+    }
 
 
 @app.get("/api/agents")

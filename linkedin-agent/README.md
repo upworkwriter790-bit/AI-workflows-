@@ -77,11 +77,42 @@ both use this.
   cold ghost rate and flag it as a signal when cold applications are
   dying off much faster than referred ones.
 
+### Multi-provider LLM support
+
+`client.py` doesn't hard-code Anthropic -- it's a facade over three
+interchangeable backends, selected with one env var (`LLM_PROVIDER`), so a
+single account being out of credits or unreachable is a config change, not
+a code change:
+
+| `LLM_PROVIDER` | Key env var | API used | Web search |
+|---|---|---|---|
+| `anthropic` (default) | `ANTHROPIC_API_KEY` | Anthropic Messages API | native `web_search_20250305` tool |
+| `openrouter` | `OPENROUTER_API_KEY` | OpenRouter (OpenAI-compatible) | `:online` model suffix (OpenRouter's web plugin) |
+| `openai` | `OPENAI_API_KEY` | OpenAI Responses API | built-in `web_search_preview` tool |
+
+Every agent and the router call the exact same `AgentClient.call(...)`
+regardless of provider -- `client.py` normalizes each provider's citation
+format into the same `[{"title", "url"}]` shape guardrails.py expects. If
+a provider's response doesn't include parseable citations, sources come
+back empty (logged, not guessed) so `guardrails.py`'s "no sources" warning
+fires honestly instead of a fabricated source slipping through.
+
+To switch, set `LLM_PROVIDER` and the matching key in `.env`:
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+Model defaults switch automatically with the provider (see
+`config._DEFAULT_MODEL_BY_PROVIDER` / `_ROUTER_MODEL_BY_PROVIDER`); override
+either with `LINKEDIN_AGENT_MODEL` / `LINKEDIN_AGENT_ROUTER_MODEL` if you
+want a specific model on any provider.
+
 ## Requirements
 
 - Python 3.10+
 - Node.js 18+ (for the frontend)
-- An Anthropic API key (`ANTHROPIC_API_KEY`)
+- An API key for at least one provider: Anthropic (`ANTHROPIC_API_KEY`,
+  default), OpenRouter (`OPENROUTER_API_KEY`), or OpenAI (`OPENAI_API_KEY`)
 
 ## Setup
 

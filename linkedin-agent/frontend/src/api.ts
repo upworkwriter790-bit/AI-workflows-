@@ -41,7 +41,7 @@ function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ status: string; model: string; api_key_configured: boolean }>("/api/health"),
+  health: () => request<{ status: string; provider: string; model: string; api_key_configured: boolean }>("/api/health"),
   listAgents: () => request<AgentSpecs>("/api/agents"),
 
   orchestrate: (task: string, overrides: Record<string, unknown> = {}) =>

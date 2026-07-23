@@ -23,7 +23,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function App() {
   const [active, setActive] = useState<TabId>("orchestrate");
-  const [health, setHealth] = useState<{ api_key_configured: boolean; model: string } | null>(null);
+  const [health, setHealth] = useState<{ api_key_configured: boolean; model: string; provider: string } | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,7 +45,9 @@ export default function App() {
             <span className="badge badge-error">Backend unreachable</span>
           ) : health ? (
             <span className={`badge ${health.api_key_configured ? "badge-success" : "badge-error"}`}>
-              {health.api_key_configured ? `Connected -- ${health.model}` : "API key not configured"}
+              {health.api_key_configured
+                ? `Connected -- ${health.provider} / ${health.model}`
+                : `${health.provider}: API key not configured`}
             </span>
           ) : (
             <span className="badge">Checking backend...</span>
