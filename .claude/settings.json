@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "telnyx": {
+      "source": {
+        "source": "github",
+        "repo": "team-telnyx/ai"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "telnyx-voice@telnyx": true
+  }
+}
