@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HR-02 Lifecycle Agent</title>
+<meta name="description" content="illactic HR-02 Onboarding + Offboarding Agent — interactive demo" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">il</div>
+      <div class="brand-text">
+        <div class="brand-line1">illactic · HR AI Workforce</div>
+        <div class="brand-line2">HR-02 · Onboarding + Offboarding Agent <span class="pill">demo</span></div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" id="btnReset" title="Reset the demo to seed data">Reset demo</button>
+      <button class="btn btn-primary" id="btnNew">+ New lifecycle event</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Board -->
+    <section class="board-wrap">
+      <div class="board">
+        <div class="column" id="col-joining">
+          <div class="column-head">
+            <h2>Joining</h2>
+            <span class="count" id="count-joining">0</span>
+          </div>
+          <div class="cards" id="cards-joining"></div>
+        </div>
+        <div class="column" id="col-exiting">
+          <div class="column-head">
+            <h2>Exiting</h2>
+            <span class="count" id="count-exiting">0</span>
+          </div>
+          <div class="cards" id="cards-exiting"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Agent activity log -->
+    <aside class="agent-panel">
+      <div class="agent-head">
+        <span class="dot"></span>
+        <h3>Agent activity</h3>
+      </div>
+      <p class="agent-sub">Everything the agent does — assembling checklists, validating documents, raising tickets, chasing, escalating — is logged here as an immutable evidence trail.</p>
+      <div class="agent-log" id="agentLog"></div>
+    </aside>
+  </main>
+
+  <!-- Detail drawer -->
+  <div class="drawer-scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+  <!-- New-event modal -->
+  <div class="modal-scrim" id="modalScrim">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 id="modalTitle">New lifecycle event</h3>
+        <button class="icon-btn" id="modalClose">✕</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="mtab active" data-mode="onboarding">Onboarding (joiner)</button>
+        <button class="mtab" data-mode="offboarding">Offboarding (leaver)</button>
+      </div>
+      <form id="eventForm" class="modal-body"></form>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" id="modalCancel">Cancel</button>
+        <button class="btn btn-primary" id="modalSubmit">Trigger agent</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="agent.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
