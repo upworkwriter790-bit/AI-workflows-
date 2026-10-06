@@ -22,6 +22,11 @@ npm start           # then open http://localhost:3000   (PORT=8080 npm start to 
 
 Open it in two browser tabs: a change in one appears in the other immediately.
 
+## Hosted version (no install)
+
+`node build-artifact.js out.html` builds a single-file version that stores data in the claude.ai
+artifact database instead of the Node server (same UI, same agent rules from `public/actions.js`).
+
 ## Backend
 
 | Endpoint | Purpose |

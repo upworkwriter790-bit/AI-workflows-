@@ -5,38 +5,19 @@
   let openCardId = null;
   let modalMode = "onboarding";
   let connected = false;
+  let pendingOpen = null;
 
   const $ = (s, r = document) => r.querySelector(s);
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  // ---------- API ----------
-  async function api(method, url, body, headers = {}) {
-    const isRaw = body instanceof Blob;
-    const res = await fetch(url, {
-      method,
-      headers: isRaw ? headers : { "Content-Type": "application/json", ...headers },
-      body: body == null ? undefined : isRaw ? body : JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { toast(data.error || `Request failed (${res.status})`, true); throw new Error(data.error || res.status); }
-    return data;
-  }
-  const act = (cardId, payload) => api("POST", `/api/cards/${cardId}/action`, payload).catch(() => {});
-
-  async function refresh() {
-    const s = await (await fetch("/api/state")).json();
-    cards = s.cards.map((c) => Agent.reviveDates(c));
-    logs = s.logs.map((l) => ({ ...l, at: new Date(l.at) }));
+  // ---------- backend (HTTP server on localhost, or the artifact database when hosted) ----------
+  const call = async (fn) => { try { return await fn(); } catch (e) { toast(e.message || "Something went wrong", true); throw e; } };
+  const act = (cardId, payload) => call(() => Backend.action(cardId, payload)).catch(() => {});
+  function onData(d) {
+    cards = d.cards.map((c) => Agent.reviveDates(c));
+    logs = d.logs.map((l) => ({ ...l, at: new Date(l.at) }));
     renderAll();
-  }
-
-  // ---------- realtime ----------
-  function connect() {
-    const es = new EventSource("/api/stream");
-    es.addEventListener("hello", () => { setLive(true); refresh(); });
-    es.addEventListener("change", () => refresh());
-    es.onerror = () => setLive(false);
   }
   function setLive(on) {
     connected = on;
@@ -117,7 +98,8 @@
   }
   function renderDrawer(id) {
     const c = cards.find((x) => x.id === id);
-    if (!c) return closeDrawer();
+    if (!c) { if (pendingOpen === id) return; return closeDrawer(); }
+    pendingOpen = null;
     const d = $("#drawer");
     const sig = JSON.stringify(c);
     if (sig === lastDrawerSig && d.dataset.id === id) return; // nothing changed: leave inputs alone
@@ -238,13 +220,13 @@
       if (!file) { toast("Choose a file to upload first", true); return; }
       b.disabled = true; b.textContent = "Uploading…";
       try {
-        const r = await api("POST", `/api/cards/${c.id}/upload/${id}`, file, { "x-filename": encodeURIComponent(file.name), "x-validation": quality });
+        const r = await call(() => Backend.upload(c.id, id, file, quality));
         toast(r.message, r.status !== "valid");
       } catch {} finally { b.disabled = false; }
     }));
     d.querySelectorAll("[data-delete]").forEach((b) => b.addEventListener("click", async () => {
       if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = "Click again to confirm delete"; setTimeout(() => { b.dataset.confirm = ""; b.textContent = "Delete event"; }, 3000); return; }
-      await api("DELETE", `/api/cards/${b.dataset.delete}`).catch(() => {});
+      await call(() => Backend.remove(b.dataset.delete)).catch(() => {});
       closeDrawer(); toast("Event deleted");
     }));
   }
@@ -289,8 +271,8 @@
     const data = Object.fromEntries(new FormData($("#eventForm")).entries());
     if (!String(data.name || "").trim()) { toast("Employee name is required", true); return; }
     try {
-      const r = await api("POST", "/api/events", { mode: modalMode, ...data });
-      closeModal(); await refresh(); openDrawer(r.id); toast("Agent assembled the checklist");
+      const r = await call(() => Backend.createEvent(modalMode, data));
+      closeModal(); pendingOpen = r.id; openDrawer(r.id); toast("Agent assembled the checklist");
     } catch {}
   }
   function ownerIcon(o) { return `<span>${{ Employee: "👤", IT: "💻", Payroll: "💰", Facilities: "🏢", Manager: "🧭", HR: "📋" }[o] || "•"}</span>`; }
@@ -301,7 +283,7 @@
     const b = $("#btnReset");
     if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = "Click again to wipe data"; setTimeout(() => { b.dataset.confirm = ""; b.textContent = "Reset demo data"; }, 3000); return; }
     b.dataset.confirm = ""; b.textContent = "Reset demo data";
-    await api("POST", "/api/reset").catch(() => {}); closeDrawer(); toast("Database reset to sample data");
+    await call(() => Backend.reset()).catch(() => {}); closeDrawer(); toast("Database reset to sample data");
   });
   $("#modalClose").addEventListener("click", closeModal);
   $("#modalCancel").addEventListener("click", closeModal);
@@ -315,6 +297,5 @@
     renderForm();
   }));
   setInterval(() => { if (document.visibilityState === "visible") renderColumn("onboarding", "cards-joining", "count-joining"), renderColumn("offboarding", "cards-exiting", "count-exiting"); }, 60000);
-  refresh().catch(() => setLive(false));
-  connect();
+  Backend.subscribe(onData, setLive);
 })();
