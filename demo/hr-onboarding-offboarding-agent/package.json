@@ -4,9 +4,9 @@
   "private": true,
   "description": "Interactive demo of the illactic HR-02 Onboarding + Offboarding Agent (from the PRD HR-02 v2).",
   "scripts": {
-    "start": "node server.js"
+    "start": "node --no-warnings server.js"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=22.5"
   }
 }

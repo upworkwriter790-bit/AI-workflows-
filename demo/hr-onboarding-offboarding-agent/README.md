@@ -5,24 +5,37 @@ described in the PRD (HR-02 v2). It simulates the agent that *generates, drives,
 evidences* every joiner and leaver checklist — requesting documents, validating what
 arrives, routing tasks, chasing what's late, and escalating what's stuck.
 
-> This is a **front-end simulation** of the agent's decision logic for demonstration and
-> testing. There is no real HRIS / ticketing / payroll integration — the "agent" runs
-> deterministically in the browser so you can see exactly how it behaves, step by step.
+> v2 has a **real backend**: a Node API with a **SQLite database**, server-side agent logic, and a
+> **live stream** (Server-Sent Events) so every open tab updates instantly. Everything you click is
+> saved (`data/hr02.db`, uploaded files in `data/uploads/`) and survives restarts. HRIS / ticketing /
+> payroll integrations and the AI document reader are not connected: the upload's "Validator finds"
+> dropdown stands in for the AI model so you can test every outcome.
 
 ## Run it on localhost
 
-No dependencies to install — it uses only Node's built-in HTTP server.
+Requires **Node 22.5+** (uses built-in `node:sqlite`; nothing to `npm install`).
 
 ```bash
 cd demo/hr-onboarding-offboarding-agent
-npm start           # or: node server.js
+npm start           # then open http://localhost:3000   (PORT=8080 npm start to change port)
 ```
 
-Then open **http://localhost:3000**
+Open it in two browser tabs: a change in one appears in the other immediately.
 
-(To use a different port: `PORT=8080 npm start`.)
+## Backend
 
-You can also just open `public/index.html` directly in a browser — it works offline too.
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/state` | all events + activity log |
+| `GET /api/stream` | SSE: pushes a `change` event on every write |
+| `POST /api/events` | trigger the agent for a new joiner / leaver |
+| `POST /api/cards/:id/action` | complete, reopen, chase, confirm ticket, HR-accept, ... |
+| `POST /api/cards/:id/upload/:itemId` | real file upload, then validation + 3-strike escalation |
+| `DELETE /api/cards/:id`, `POST /api/reset` | delete an event / reset sample data |
+
+A background scheduler runs every 15s: it auto-chases overdue items and escalates any access-revocation
+ticket still unconfirmed 4 hours after its effective time as a security incident. The settlement lock is
+enforced **server-side** (a direct API call to release it is rejected with 400 until all clearances are green).
 
 ## What the demo shows (mapped to the PRD)
 
@@ -52,7 +65,8 @@ amends a contract, calculates final settlement, or initiates/justifies an exit.
 
 ```
 demo/hr-onboarding-offboarding-agent/
-├── server.js            # zero-dependency static server (localhost)
+├── server.js            # backend: REST API + SQLite + SSE + scheduler
+├── data/                # created at runtime (db + uploads, git-ignored)
 ├── package.json
 ├── README.md
 └── public/

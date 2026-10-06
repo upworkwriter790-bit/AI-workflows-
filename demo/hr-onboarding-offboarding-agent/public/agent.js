@@ -5,8 +5,7 @@
  * access-revocation ticket with 4h escalation. No reclassification, no settlement calc — by design.
  */
 const Agent = (() => {
-  let seq = 100;
-  const nextId = (p) => `${p}-${++seq}`;
+  const nextId = (p) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
   const DAY = 86400000;
 
   const fmtDate = (d) =>
@@ -300,7 +299,22 @@ const Agent = (() => {
     return { kind, msg, important, at: new Date() };
   }
 
+  // JSON round-trips turn Dates into strings; restore them after loading from the API / DB.
+  function reviveDates(card) {
+    const D = (v) => (v ? new Date(v) : v);
+    card.anchor = D(card.anchor);
+    card.groups.forEach((g) =>
+      g.items.forEach((it) => {
+        it.due = D(it.due);
+        if (it.ticket && it.ticket.effectiveAt) it.ticket.effectiveAt = D(it.ticket.effectiveAt);
+        if (it.lastChased) it.lastChased = D(it.lastChased);
+      })
+    );
+    return card;
+  }
+
   return {
+    reviveDates,
     buildOnboarding,
     buildOffboarding,
     validateDocument,
@@ -316,3 +330,4 @@ const Agent = (() => {
     nextId,
   };
 })();
+if (typeof module !== "undefined") module.exports = Agent;
