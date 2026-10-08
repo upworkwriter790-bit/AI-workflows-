@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Env & data
+.env
+data/app.db
+data/chroma/
+data/crm/
+data/*.db
+
+# OS
+.DS_Store
