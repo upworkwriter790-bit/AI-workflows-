@@ -14,5 +14,5 @@ langchain-ollama>=0.2        # local dev via Ollama
 langchain-openai>=0.2        # cloud fallback (optional)
 
 # --- RAG (imported lazily; optional, degrades gracefully if absent) ---
-langchain-community>=0.3
+langchain-chroma>=0.1
 chromadb>=0.5

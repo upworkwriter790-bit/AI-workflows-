@@ -82,12 +82,22 @@ def load_lead_and_config(state: AgentState) -> AgentState:
 def dedup_and_verify(state: AgentState) -> AgentState:
     """QC gauntlet: verify contactability + dedup before spending LLM effort."""
     lead = state["lead"]
-    lead.verification_status = enrich.verify_email(lead.email)
+    if not lead.email and lead.phone:
+        # Phone-native channel (e.g. WhatsApp): reachable without an email address.
+        lead.verification_status = VerificationStatus.verified
+    else:
+        lead.verification_status = enrich.verify_email(lead.email)
 
     dup = crm.find_duplicate(lead)
     if dup:
+        # Fold the new message into the original thread; do not re-qualify or auto-reply.
         state["duplicate_of"] = dup.id
+        for m in db.list_messages(lead.id):
+            m.lead_id = dup.id
+            db.save_message(m)
+        lead.status = LeadStatus.duplicate
         _audit(lead.id, lead.client_id, "duplicate_detected", {"duplicate_of": dup.id})
+        _audit(dup.id, dup.client_id, "duplicate_message_merged", {"from_lead": lead.id})
 
     db.save_lead(lead)
     _audit(lead.id, lead.client_id, "verify_email", {"status": lead.verification_status.value})
@@ -205,6 +215,10 @@ def schedule_meeting(state: AgentState) -> AgentState:
 # --------------------------------------------------------------------------- #
 # Conditional routers
 # --------------------------------------------------------------------------- #
+def _after_dedup(state: AgentState) -> str:
+    return END if state.get("duplicate_of") else "retrieve_rag_context"
+
+
 def _after_draft(state: AgentState) -> str:
     if state.get("needs_human_approval") and not state.get("approved"):
         return "await_approval"
@@ -236,7 +250,7 @@ def build_graph():
 
     g.set_entry_point("load_lead_and_config")
     g.add_edge("load_lead_and_config", "dedup_and_verify")
-    g.add_edge("dedup_and_verify", "retrieve_rag_context")
+    g.add_conditional_edges("dedup_and_verify", _after_dedup, {"retrieve_rag_context": "retrieve_rag_context", END: END})
     g.add_edge("retrieve_rag_context", "parse_and_enrich")
     g.add_edge("parse_and_enrich", "qualify_lead")
     g.add_edge("qualify_lead", "decide_next_step")

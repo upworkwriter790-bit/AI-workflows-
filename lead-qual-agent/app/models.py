@@ -43,6 +43,7 @@ class LeadStatus(str, Enum):
     nurture = "nurture"
     disqualified = "disqualified"
     needs_manual_routing = "needs_manual_routing"
+    duplicate = "duplicate"
 
 
 class Label(str, Enum):

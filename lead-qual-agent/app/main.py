@@ -137,7 +137,12 @@ def ingest(req: IngestRequest) -> Dict[str, Any]:
     final = graph.process_lead(lead.id)
     out_lead = db.get_lead(lead.id)
     qual = db.latest_qualification(lead.id)
-    return {"processed": True, "errors": final.get("errors", []), **_lead_summary(out_lead, qual)}
+    return {
+        "processed": True,
+        "duplicate_of": final.get("duplicate_of"),
+        "errors": final.get("errors", []),
+        **_lead_summary(out_lead, qual),
+    }
 
 
 @app.post("/leads/{lead_id}/process")

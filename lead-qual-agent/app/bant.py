@@ -189,9 +189,9 @@ def qualify(lead: Lead, icp: ICPConfig, cfg: BANTConfig, rag_context: str) -> Qu
             raw = json.loads(llm_mod.extract_json(out))
             reasoning = str(raw.get("reasoning", ""))
             method = "llm+rules"
-        except Exception:
+        except Exception as e:
             raw = llm_mod.heuristic_bant(lead)
-            reasoning = "LLM parse failed; used heuristic fallback."
+            reasoning = f"LLM unavailable or unparseable ({e.__class__.__name__}); used heuristic fallback."
             method = "rule_based(fallback)"
 
     dims = _dims_from_raw(raw)
@@ -255,13 +255,19 @@ def draft_response(lead: Lead, qual: QualificationResult, rag_context: str) -> s
     mode = llm_mode()
     questions = draft_followup_questions(qual)
 
+    # A Cold lead with genuine pain but unknown firmographics gets discovery
+    # questions, not a polite brush-off; only true no-need leads are declined.
+    tone = qual.label
+    if tone == Label.cold and qual.need.score >= 2 and qual.next_step != NextStep.disqualify:
+        tone = Label.warm
+
     if mode == "stub":
-        return llm_mod.heuristic_draft(lead, qual.label.value, qual.next_step.value, questions)
+        return llm_mod.heuristic_draft(lead, tone.value, qual.next_step.value, questions)
 
     provider = llm_mod.get_provider()
-    if qual.label == Label.hot:
+    if tone == Label.hot:
         action = "Propose a short intro call and include the placeholder [MEETING_LINK]. Ask at most 1-2 brief clarifying questions."
-    elif qual.label == Label.warm:
+    elif tone == Label.warm:
         action = "Provide a helpful, concise reply and ask 2-3 discovery questions to understand budget, authority, need and timeline."
     else:
         action = "Politely share basic info, indicate we may not be the best fit right now, and offer to stay in touch."
@@ -280,4 +286,4 @@ def draft_response(lead: Lead, qual: QualificationResult, rag_context: str) -> s
     try:
         return provider.generate(prompt)
     except Exception:
-        return llm_mod.heuristic_draft(lead, qual.label.value, qual.next_step.value, questions)
+        return llm_mod.heuristic_draft(lead, tone.value, qual.next_step.value, questions)
