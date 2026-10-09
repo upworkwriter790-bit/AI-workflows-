@@ -1,17 +1,21 @@
 """FastAPI surface for the Lead Response & Qualification Agent."""
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app import config, db, graph, rag
+from app import config, crm, db, graph, rag, scheduler
 from app.models import (
     AuditEntry,
+    BANTConfig,
     Channel,
     ConversationMessage,
+    ICPConfig,
     Label,
     Lead,
     LeadStatus,
@@ -21,9 +25,29 @@ from app.models import (
 app = FastAPI(title="Lead Response & Qualification Agent", version="0.1.0")
 
 
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+
 @app.on_event("startup")
 def _startup() -> None:
     db.init_db()
+    if not db.list_clients():  # first run: create the demo client so the UI is never empty
+        try:
+            from scripts.seed import seed
+
+            seed()
+        except Exception as e:  # pragma: no cover
+            print(f"[startup] demo seed skipped ({e.__class__.__name__}: {e})")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
+
+
+@app.get("/", include_in_schema=False)
+def ui() -> FileResponse:
+    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
 
 # --------------------------------------------------------------------------- #
@@ -49,6 +73,11 @@ class OverrideRequest(BaseModel):
     total_score: Optional[int] = None
     reason: str = ""
     actor: str = "user"
+
+
+class MeetingConfirm(BaseModel):
+    scheduled_for: str                  # ISO datetime from the calendar tool / webhook
+    actor: str = "system"
 
 
 class RagIndexRequest(BaseModel):
@@ -102,6 +131,12 @@ def _normalize(source: Channel, payload: Dict[str, Any], client_id: str, source_
 def _lead_summary(lead: Lead, qual=None) -> Dict[str, Any]:
     return {
         "lead_id": lead.id,
+        "name": lead.name,
+        "company": lead.company,
+        "title": lead.title,
+        "email": lead.email,
+        "source": lead.source.value,
+        "created_at": lead.created_at,
         "status": lead.status.value,
         "owner_id": lead.owner_id,
         "verification_status": lead.verification_status.value if lead.verification_status else None,
@@ -173,6 +208,22 @@ def approve(lead_id: str, req: ApproveRequest) -> Dict[str, Any]:
     return _lead_summary(db.get_lead(lead_id), db.latest_qualification(lead_id))
 
 
+@app.post("/leads/{lead_id}/meeting/confirm")
+def confirm_meeting(lead_id: str, req: MeetingConfirm) -> Dict[str, Any]:
+    """Called when the lead actually books (Calendly/Google webhook or manual)."""
+    lead = db.get_lead(lead_id)
+    if not lead:
+        raise HTTPException(404, "lead not found")
+    meeting = scheduler.book_meeting(lead, req.scheduled_for)
+    if not meeting:
+        raise HTTPException(409, "no meeting has been proposed for this lead")
+    lead.status = LeadStatus.meeting_booked
+    db.save_lead(lead)
+    crm.upsert_lead(lead, db.latest_qualification(lead_id))
+    db.add_audit(AuditEntry(lead_id=lead_id, client_id=lead.client_id, actor=req.actor, action="meeting_booked", detail={"scheduled_for": req.scheduled_for}))
+    return _lead_summary(lead, db.latest_qualification(lead_id))
+
+
 @app.get("/leads/{lead_id}")
 def get_lead(lead_id: str) -> Dict[str, Any]:
     lead = db.get_lead(lead_id)
@@ -186,6 +237,54 @@ def get_lead(lead_id: str) -> Dict[str, Any]:
         "meeting": (db.get_meeting_for_lead(lead_id).model_dump() if db.get_meeting_for_lead(lead_id) else None),
         "audit_trail": [a.model_dump() for a in db.list_audit(lead_id)],
     }
+
+
+class ConfigUpdate(BaseModel):
+    icp: Optional[Dict[str, Any]] = None
+    bant: Optional[Dict[str, Any]] = None
+    settings: Optional[Dict[str, Any]] = None   # require_human_approval, routing_strategy, default_calendar_link
+
+
+@app.get("/clients")
+def list_clients() -> Dict[str, Any]:
+    return {"clients": [
+        {"id": c.id, "name": c.name, "industry": c.industry,
+         "require_human_approval": c.require_human_approval,
+         "routing_strategy": c.routing_strategy, "reps": len(c.reps)}
+        for c in db.list_clients()
+    ]}
+
+
+@app.get("/clients/{client_id}/config")
+def get_config(client_id: str) -> Dict[str, Any]:
+    client = db.get_client(client_id)
+    if not client:
+        raise HTTPException(404, "unknown client")
+    icp = db.get_icp_for_client(client_id) or ICPConfig(client_id=client_id)
+    bant = db.get_bant_for_client(client_id) or BANTConfig(client_id=client_id)
+    return {"client": client.model_dump(), "icp": icp.model_dump(), "bant": bant.model_dump()}
+
+
+@app.put("/clients/{client_id}/config")
+def update_config(client_id: str, req: ConfigUpdate) -> Dict[str, Any]:
+    client = db.get_client(client_id)
+    if not client:
+        raise HTTPException(404, "unknown client")
+    try:
+        if req.settings:
+            allowed = {"require_human_approval", "routing_strategy", "default_calendar_link"}
+            client = client.model_copy(update={k: v for k, v in req.settings.items() if k in allowed})
+            db.save_client(client)
+        if req.icp is not None:
+            cur = db.get_icp_for_client(client_id) or ICPConfig(client_id=client_id)
+            db.save_icp(ICPConfig(**{**cur.model_dump(), **req.icp, "id": cur.id, "client_id": client_id}))
+        if req.bant is not None:
+            cur = db.get_bant_for_client(client_id) or BANTConfig(client_id=client_id)
+            db.save_bant(BANTConfig(**{**cur.model_dump(), **req.bant, "id": cur.id, "client_id": client_id}))
+    except Exception as e:
+        raise HTTPException(422, f"invalid config: {e}")
+    db.add_audit(AuditEntry(client_id=client_id, actor="user", action="config_updated", detail={"sections": [k for k, v in req.model_dump().items() if v is not None]}))
+    return get_config(client_id)
 
 
 @app.get("/clients/{client_id}/leads")
@@ -234,6 +333,7 @@ def dashboard(client_id: str) -> Dict[str, Any]:
     complete = 0
     response_secs: List[float] = []
     booked = 0
+    proposed = 0
 
     for lead in leads:
         by_status[lead.status.value] = by_status.get(lead.status.value, 0) + 1
@@ -250,6 +350,8 @@ def dashboard(client_id: str) -> Dict[str, Any]:
                 pass
         if lead.status == LeadStatus.meeting_booked:
             booked += 1
+        if lead.status in (LeadStatus.meeting_proposed, LeadStatus.meeting_booked):
+            proposed += 1
         q = db.latest_qualification(lead.id)
         if q:
             by_label[q.label.value] = by_label.get(q.label.value, 0) + 1
@@ -261,6 +363,7 @@ def dashboard(client_id: str) -> Dict[str, Any]:
         "total_leads": total,
         "qualification_distribution": by_label,
         "status_distribution": by_status,
+        "meetings_proposed": proposed,
         "meeting_booking_rate_pct": pct(booked),
         "lead_to_verified_rate_pct": pct(verified),       # LTVL
         "data_completeness_pct": pct(complete),            # target 95%+

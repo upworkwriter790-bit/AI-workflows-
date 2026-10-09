@@ -195,7 +195,7 @@ def send_and_log(state: AgentState) -> AgentState:
     from datetime import datetime, timezone
     if not lead.first_response_at:
         lead.first_response_at = datetime.now(timezone.utc).isoformat()
-    lead.status = LeadStatus.meeting_booked if (qual and qual.next_step == NextStep.book_meeting) else (
+    lead.status = LeadStatus.meeting_proposed if (qual and qual.next_step == NextStep.book_meeting) else (
         LeadStatus.disqualified if (qual and qual.next_step == NextStep.disqualify) else LeadStatus.responded
     )
     db.save_lead(lead)
@@ -227,7 +227,7 @@ def _after_draft(state: AgentState) -> str:
 
 def _after_send(state: AgentState) -> str:
     qual = state.get("qualification")
-    if qual and qual.next_step == NextStep.book_meeting and state["lead"].status == LeadStatus.meeting_booked:
+    if qual and qual.next_step == NextStep.book_meeting and state["lead"].status == LeadStatus.meeting_proposed:
         return "schedule_meeting"
     return END
 

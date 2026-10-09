@@ -39,6 +39,7 @@ class LeadStatus(str, Enum):
     qualified = "qualified"
     pending_approval = "pending_approval"
     responded = "responded"
+    meeting_proposed = "meeting_proposed"
     meeting_booked = "meeting_booked"
     nurture = "nurture"
     disqualified = "disqualified"

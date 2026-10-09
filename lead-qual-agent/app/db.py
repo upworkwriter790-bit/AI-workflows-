@@ -73,6 +73,15 @@ def save_client(client: Client) -> Client:
         conn.close()
 
 
+def list_clients() -> List[Client]:
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT data FROM clients ORDER BY id").fetchall()
+        return [Client.model_validate_json(r["data"]) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_client(client_id: str) -> Optional[Client]:
     conn = _connect()
     try:

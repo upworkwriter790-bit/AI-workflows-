@@ -38,6 +38,8 @@ Lead source (web form / email / WhatsApp / LinkedIn)
   BANT for the total score → Hot / Warm / Cold.
 - **Explainability:** every qualification stores per-dimension scores, signals,
   reasons and a reasoning summary. Every decision is written to an audit trail.
+- **Meeting status is honest:** `meeting_proposed` when the calendar link is sent;
+  `meeting_booked` only after the lead books (confirm endpoint / UI button).
 - **Human-in-the-loop:** when a client requires approval, the graph pauses after
   drafting; the rep approves/edits via `/approve` and delivery resumes.
 
@@ -61,7 +63,12 @@ python scripts/smoke_test.py
 uvicorn app.main:app --reload
 ```
 
-Then ingest a lead:
+**Open the web UI: <http://localhost:8000>** (Dashboard, Leads, Submit lead, Approvals, Client config).
+The demo client (Acme Logistics) is created automatically on first start. Use **Submit lead** and
+click a sample (Hot / Warm / Cold / WhatsApp) to watch the agent qualify, draft and route it.
+Raw API docs live at <http://localhost:8000/docs>.
+
+Or ingest a lead by API:
 
 ```bash
 curl -X POST http://localhost:8000/leads/ingest -H "Content-Type: application/json" -d '{
@@ -75,8 +82,6 @@ curl -X POST http://localhost:8000/leads/ingest -H "Content-Type: application/js
   }
 }'
 ```
-
-Interactive API docs: <http://localhost:8000/docs>
 
 ---
 
@@ -107,7 +112,11 @@ empty context and the agent still runs.
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| GET  | `/` | **web admin UI** |
 | GET  | `/health` | status + current LLM mode |
+| GET  | `/clients` | list clients |
+| GET/PUT | `/clients/{id}/config` | read / update ICP, BANT weights, thresholds, rules, approval + routing settings |
+| POST | `/leads/{id}/meeting/confirm` | mark a proposed meeting as actually booked (Calendly webhook / manual) |
 | POST | `/leads/ingest` | ingest + auto-process a lead (any channel) |
 | POST | `/leads/{id}/process` | run the graph on a stored lead |
 | POST | `/leads/{id}/approve` | approve/edit a pending draft (human-in-the-loop) |
@@ -124,7 +133,8 @@ empty context and the agent still runs.
 ```
 lead-qual-agent/
   app/
-    main.py        FastAPI endpoints + ingestion normalization
+    main.py        FastAPI endpoints + ingestion normalization + serves the UI
+    static/index.html  web admin UI (no build step, no CDN)
     graph.py       LangGraph workflow (9 nodes, approval + schedule branches)
     bant.py        BANT scoring engine (fit + weighted BANT + rules + prompts)
     llm.py         stub/ollama/cloud providers + heuristic fallback

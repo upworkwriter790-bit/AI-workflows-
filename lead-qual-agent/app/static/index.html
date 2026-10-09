@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Qualification Agent</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mute:#6b7280;--line:#e5e7eb;--brand:#4f46e5;--brand-ink:#fff;
+--hot:#dc2626;--warm:#d97706;--cold:#2563eb;--ok:#059669;--hotbg:#fee2e2;--warmbg:#fef3c7;--coldbg:#dbeafe;--okbg:#d1fae5;--shadow:0 1px 2px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.06)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b22;--ink:#e8eaee;--mute:#9aa3b2;--line:#2a2f3a;--brand:#818cf8;--brand-ink:#0f1115;
+--hotbg:#4c1d1d;--warmbg:#4a3512;--coldbg:#14284d;--okbg:#0f3a2c;--shadow:0 1px 2px rgba(0,0,0,.4)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{font-size:16px;margin:0;font-weight:650}h1 small{color:var(--mute);font-weight:500;margin-left:6px}
+.sp{flex:1}select,input,textarea,button{font:inherit;color:inherit}
+select,input,textarea{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%}
+textarea{min-height:90px;resize:vertical}
+button{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 14px;cursor:pointer}
+button:hover{border-color:var(--brand)}button.pri{background:var(--brand);color:var(--brand-ink);border-color:var(--brand);font-weight:600}
+button.danger{color:var(--hot)}button:disabled{opacity:.5;cursor:default}
+.badge{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--mute)}
+nav{display:flex;gap:4px;padding:0 20px;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;border-bottom:2px solid transparent;border-radius:0;padding:11px 14px;background:none;color:var(--mute)}
+nav button.on{color:var(--brand);border-color:var(--brand);font-weight:600}
+nav .n{background:var(--hot);color:#fff;border-radius:99px;font-size:11px;padding:0 6px;margin-left:5px}
+main{max-width:1180px;margin:0 auto;padding:20px}
+.grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.kpi .v{font-size:28px;font-weight:700;line-height:1.1}.kpi .l{color:var(--mute);font-size:12px;margin-top:4px}.kpi .h{color:var(--mute);font-size:11px;margin-top:2px}
+.two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+h2{font-size:14px;margin:0 0 12px;font-weight:650}
+.bar{display:flex;align-items:center;gap:10px;margin:7px 0}.bar .t{width:130px;color:var(--mute);font-size:12.5px}
+.bar .b{flex:1;height:10px;background:var(--bg);border-radius:99px;overflow:hidden}.bar .b i{display:block;height:100%;border-radius:99px;background:var(--brand)}
+.bar .c{width:34px;text-align:right;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--mute);font-weight:600}tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}
+.wrap{overflow-x:auto}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:99px}
+.Hot{background:var(--hotbg);color:var(--hot)}.Warm{background:var(--warmbg);color:var(--warm)}.Cold{background:var(--coldbg);color:var(--cold)}.st{background:var(--bg);color:var(--mute);border:1px solid var(--line)}.okc{background:var(--okbg);color:var(--ok)}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}.row{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.empty{color:var(--mute);text-align:center;padding:36px}
+#drawer{position:fixed;inset:0 0 0 auto;width:min(640px,100%);background:var(--card);border-left:1px solid var(--line);box-shadow:-8px 0 30px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .2s;z-index:20;overflow-y:auto;padding:20px}
+#drawer.open{transform:none}#scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:15}#scrim.open{display:block}
+.dim{margin:10px 0}.dim .top{display:flex;justify-content:space-between;font-weight:600}.dim ul{margin:4px 0 0 18px;padding:0;color:var(--mute);font-size:12.5px}
+.pips{display:flex;gap:4px;margin-top:4px}.pips i{flex:1;height:8px;border-radius:4px;background:var(--line)}.pips i.f{background:var(--brand)}
+.msg{padding:9px 12px;border-radius:12px;margin:8px 0;max-width:88%;white-space:pre-wrap;word-break:break-word}
+.msg.lead{background:var(--bg);border:1px solid var(--line)}.msg.agent{background:var(--brand);color:var(--brand-ink);margin-left:auto}.msg small{display:block;opacity:.7;font-size:11px;margin-bottom:2px}
+.tl{border-left:2px solid var(--line);margin-left:6px;padding-left:14px}.tl div{margin:7px 0;font-size:12.5px;position:relative}.tl div:before{content:"";position:absolute;left:-19px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--brand)}.tl small{color:var(--mute)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:10px;z-index:50;display:none}
+.note{color:var(--mute);font-size:12.5px}.right{margin-left:auto}.flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lead Response &amp; Qualification Agent <small id="mode"></small></h1>
+  <span class="sp"></span>
+  <select id="client" style="width:auto;min-width:200px" aria-label="Client"></select>
+  <button id="refresh" title="Reload data">Refresh</button>
+</header>
+<nav id="tabs">
+  <button data-t="dash" class="on">Dashboard</button>
+  <button data-t="leads">Leads</button>
+  <button data-t="new">Submit lead</button>
+  <button data-t="appr">Approvals<span class="n" id="apprN" style="display:none"></span></button>
+  <button data-t="cfg">Client config</button>
+</nav>
+<main id="view"></main>
+<div id="scrim"></div><aside id="drawer" aria-label="Lead detail"></aside><div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const api=async(path,opt={})=>{const r=await fetch(path,{headers:{"Content-Type":"application/json"},...opt});
+  let d=null;try{d=await r.json()}catch(e){}
+  if(!r.ok)throw new Error((d&&(typeof d.detail==="string"?d.detail:JSON.stringify(d.detail)))||("HTTP "+r.status));return d};
+const toast=m=>{const t=$("#toast");t.textContent=m;t.style.display="block";clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display="none",3200)};
+const S={tab:"dash",client:null,leads:[],cfg:null};
+const chip=l=>l?`<span class="chip ${esc(l)}">${esc(l)}</span>`:`<span class="chip st">unscored</span>`;
+const st=s=>`<span class="chip ${s==="meeting_booked"?"okc":"st"}">${esc((s||"").replace(/_/g," "))}</span>`;
+const fmt=t=>t?new Date(t).toLocaleString():"";
+
+async function boot(){
+  try{const h=await api("/health");$("#mode").innerHTML=`<span class="badge">LLM: ${esc(h.llm_mode)}</span> <span class="badge">RAG: ${h.rag_enabled?"on":"off"}</span>`}catch(e){}
+  const {clients}=await api("/clients");
+  const sel=$("#client");sel.innerHTML=clients.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  S.client=sel.value||null;sel.onchange=()=>{S.client=sel.value;load()};
+  $("#refresh").onclick=load;
+  document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;
+    document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));render()});
+  if(!S.client){$("#view").innerHTML='<div class="empty">No clients yet. Run <code>python scripts/seed.py</code> and refresh.</div>';return}
+  load();
+}
+async function load(){
+  if(!S.client)return;
+  try{
+    const [d,l,c]=await Promise.all([api(`/clients/${S.client}/dashboard`),api(`/clients/${S.client}/leads`),api(`/clients/${S.client}/config`)]);
+    S.dash=d;S.leads=l.leads;S.cfg=c;
+    const p=S.leads.filter(x=>x.status==="pending_approval").length;const n=$("#apprN");n.textContent=p;n.style.display=p?"":"none";
+    render();
+  }catch(e){toast("Load failed: "+e.message)}
+}
+function render(){({dash:vDash,leads:vLeads,new:vNew,appr:vAppr,cfg:vCfg}[S.tab])()}
+
+/* ---------- Dashboard ---------- */
+function bars(obj,total,color){const keys=Object.keys(obj);if(!keys.length)return'<div class="note">No data yet.</div>';
+  return keys.map(k=>`<div class="bar"><span class="t">${esc(k.replace(/_/g," "))}</span><span class="b"><i style="width:${total?Math.round(100*obj[k]/total):0}%;${color?`background:var(--${color[k]||"brand"})`:""}"></i></span><span class="c">${obj[k]}</span></div>`).join("")}
+function vDash(){const d=S.dash;if(!d)return;const q=d.qualification_distribution;
+  const k=(v,l,h)=>`<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div>${h?`<div class="h">${h}</div>`:""}</div>`;
+  $("#view").innerHTML=`<div class="grid kpis">
+   ${k(d.total_leads,"Total leads")}${k(q.Hot||0,"Hot leads")}${k(q.Warm||0,"Warm leads")}${k(q.Cold||0,"Cold leads")}
+   ${k(d.meetings_proposed,"Meetings proposed","calendar link sent to Hot leads")}${k(d.meeting_booking_rate_pct+"%","Meeting booking rate","lead actually booked")}
+   ${k(d.lead_to_verified_rate_pct+"%","Lead-to-verified rate","LTVL; contactable leads")}
+   ${k(d.data_completeness_pct+"%","Data completeness","target 95%+")}
+   ${k(d.avg_first_response_seconds==null?"n/a":d.avg_first_response_seconds+"s","Avg first response","target &lt;30s chat, &lt;2m email")}
+  </div><div class="grid two" style="margin-top:14px">
+   <div class="card"><h2>Qualification mix</h2>${bars(q,d.total_leads,{Hot:"hot",Warm:"warm",Cold:"cold"})}</div>
+   <div class="card"><h2>Lead status</h2>${bars(d.status_distribution,d.total_leads)}</div></div>`}
+
+/* ---------- Leads ---------- */
+function vLeads(){
+  const rows=S.leads.map(l=>`<tr data-id="${esc(l.lead_id)}"><td><b>${esc(l.name||"(no name)")}</b><div class="note">${esc(l.email)}</div></td>
+   <td>${esc(l.company)}<div class="note">${esc(l.title)}</div></td><td>${esc(l.source)}</td><td>${chip(l.label)}</td>
+   <td>${l.total_score??""}</td><td>${st(l.status)}</td><td>${esc(l.owner_id||"")}</td><td class="note">${esc(fmt(l.created_at))}</td></tr>`).join("");
+  $("#view").innerHTML=`<div class="card"><div class="wrap"><table><thead><tr><th>Lead</th><th>Company</th><th>Source</th><th>Label</th><th>Score</th><th>Status</th><th>Owner</th><th>Received</th></tr></thead>
+   <tbody>${rows||""}</tbody></table></div>${rows?"":'<div class="empty">No leads yet. Use <b>Submit lead</b> to send one through the agent.</div>'}</div>`;
+  document.querySelectorAll("#view tbody tr").forEach(r=>r.onclick=()=>openLead(r.dataset.id));
+}
+
+/* ---------- Submit lead ---------- */
+const SAMPLES={
+ hot:{ch:"web_form",f:{name:"Rahul Sharma",email:"rahul@acme.in",company:"Acme Logistics",title:"Operations Head",phone:"+91-9800000000",website:"https://acme.in",company_size:150,industry:"Logistics",region:"IN",budget_range:"$20k-$50k",message:"We are losing ~15% of deliveries due to poor routing. Our current tool is basic and doesn't optimize in real time. We need a solution before our peak season in Q1. I own this initiative but need CFO sign-off for spend above $30k."}},
+ warm:{ch:"web_form",f:{name:"Meera Iyer",email:"meera@shipfast.sg",company:"ShipFast",title:"Logistics Manager",company_size:80,industry:"Supply Chain",region:"SG",message:"We struggle with manual route planning and want to improve efficiency. Not sure about budget yet, exploring options for next year maybe."}},
+ cold:{ch:"web_form",f:{name:"John Doe",email:"john@retailco.com",company:"RetailCo",title:"Intern",company_size:5,industry:"Retail B2C",region:"US",message:"Just curious what you do, nice to have maybe someday."}},
+ wa:{ch:"whatsapp",f:{profile_name:"Anita",from_number:"+65 9000 0000",text:"Hi, we struggle with manual route planning and need it live this quarter."}}};
+const FIELDS={web_form:[["name","Name"],["email","Email"],["company","Company"],["title","Job title"],["phone","Phone"],["website","Website"],["company_size","Company size (employees)"],["industry","Industry"],["region","Region (IN/SG/AE/US)"],["budget_range","Budget range"],["message","Message","ta"]],
+ linkedin:null,email:[["from_name","Sender name"],["from_email","Sender email"],["subject","Subject"],["body","Body","ta"]],
+ whatsapp:[["profile_name","Profile name"],["from_number","WhatsApp number"],["text","Message","ta"]]};
+FIELDS.linkedin=FIELDS.web_form;
+function vNew(ch="web_form",vals={}){
+  const f=FIELDS[ch].map(([k,l,t])=>`<div style="${t?"grid-column:1/-1":""}"><label>${l}</label>${t?`<textarea name="${k}">${esc(vals[k]??"")}</textarea>`:`<input name="${k}" value="${esc(vals[k]??"")}">`}</div>`).join("");
+  $("#view").innerHTML=`<div class="card"><h2>Send a lead through the agent</h2>
+   <div class="flex" style="margin-bottom:6px"><span class="note">Try a sample:</span>
+    <button data-s="hot">Hot lead</button><button data-s="warm">Warm lead</button><button data-s="cold">Cold lead</button><button data-s="wa">WhatsApp lead</button></div>
+   <label>Channel</label><select id="ch" style="max-width:240px">${["web_form","email","whatsapp","linkedin"].map(c=>`<option ${c===ch?"selected":""}>${c}</option>`).join("")}</select>
+   <form id="f"><div class="row" style="margin-top:4px">${f}</div>
+   <div class="flex" style="margin-top:14px"><button class="pri" id="go">Submit &amp; qualify</button><span class="note" id="res"></span></div></form></div>`;
+  $("#ch").onchange=e=>vNew(e.target.value);
+  document.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{const s=SAMPLES[b.dataset.s];vNew(s.ch,s.f)});
+  $("#f").onsubmit=async e=>{e.preventDefault();const lead={};
+    new FormData(e.target).forEach((v,k)=>{if(String(v).trim()!=="")lead[k]=["company_size"].includes(k)?Number(v):v});
+    const go=$("#go");go.disabled=true;$("#res").textContent="Running agent...";
+    try{const r=await api("/leads/ingest",{method:"POST",body:JSON.stringify({source:$("#ch").value,client_id:S.client,lead})});
+      toast(r.duplicate_of?"Duplicate of an existing lead; merged into its thread":`${r.label||"Scored"} (${r.total_score??"-"}): ${r.status.replace(/_/g," ")}`);
+      await load();S.tab="leads";document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x.dataset.t==="leads"));render();openLead(r.duplicate_of||r.lead_id)}
+    catch(err){$("#res").textContent="Error: "+err.message}finally{go.disabled=false}};
+}
+
+/* ---------- Approvals ---------- */
+function vAppr(){const p=S.leads.filter(x=>x.status==="pending_approval");
+  $("#view").innerHTML=p.length?`<div class="grid">${p.map(l=>`<div class="card"><div class="flex"><b>${esc(l.name)}</b> ${chip(l.label)} <span class="note">${esc(l.company)} &middot; score ${l.total_score??""}</span><button class="right" data-id="${esc(l.lead_id)}">Review &amp; send</button></div>
+   <pre style="white-space:pre-wrap;font:inherit;color:var(--mute);margin:10px 0 0">${esc((l.draft_response||"").slice(0,260))}${(l.draft_response||"").length>260?"...":""}</pre></div>`).join("")}</div>`
+   :'<div class="card empty">Nothing waiting for approval.<div class="note" style="margin-top:6px">Turn on "Require human approval" in Client config to review drafts before they send.</div></div>';
+  document.querySelectorAll("#view [data-id]").forEach(b=>b.onclick=()=>openLead(b.dataset.id));}
+
+/* ---------- Client config ---------- */
+const csv=a=>(a||[]).join(", "),unc=s=>s.split(",").map(x=>x.trim()).filter(Boolean);
+function vCfg(){const c=S.cfg;if(!c)return;const {client:cl,icp,bant}=c,w=bant.weights,t=bant.score_thresholds,r=bant.rules;
+  const num=(id,v,step)=>`<input type="number" id="${id}" value="${v}" step="${step||"any"}">`;
+  $("#view").innerHTML=`<div class="grid two"><div class="card"><h2>Agent behaviour</h2>
+   <label><input type="checkbox" id="hum" style="width:auto" ${cl.require_human_approval?"checked":""}> Require human approval before sending</label>
+   <label>Routing strategy</label><select id="rs">${["round_robin","territory","segment"].map(x=>`<option ${x===cl.routing_strategy?"selected":""}>${x}</option>`).join("")}</select>
+   <label>Default calendar link</label><input id="cal" value="${esc(cl.default_calendar_link||"")}">
+   <h2 style="margin-top:18px">Sales reps</h2>${cl.reps.map(x=>`<div class="note"><b>${esc(x.name)}</b> (${esc(x.id)}) &middot; regions ${esc(csv(x.regions))||"any"} &middot; segments ${esc(csv(x.segments))||"any"}</div>`).join("")||'<div class="note">No reps configured.</div>'}</div>
+   <div class="card"><h2>Ideal customer profile</h2>
+   <label>Target industries (comma separated)</label><input id="ti" value="${esc(csv(icp.target_industries))}">
+   <label>Excluded industries</label><input id="ei" value="${esc(csv(icp.exclude_industries))}">
+   <div class="row"><div><label>Min company size</label>${num("smin",icp.company_size_min)}</div><div><label>Max company size</label>${num("smax",icp.company_size_max)}</div></div>
+   <label>Target regions</label><input id="tr" value="${esc(csv(icp.target_regions))}">
+   <label>Target titles</label><input id="tt" value="${esc(csv(icp.target_titles))}">
+   <label>Ideal use cases</label><input id="uc" value="${esc(csv(icp.ideal_use_cases))}"></div>
+   <div class="card"><h2>BANT weighting</h2><div class="row">
+   <div><label>Budget</label>${num("wb",w.budget,"0.05")}</div><div><label>Authority</label>${num("wa",w.authority,"0.05")}</div>
+   <div><label>Need</label>${num("wn",w.need,"0.05")}</div><div><label>Timeline</label>${num("wt",w.timeline,"0.05")}</div></div>
+   <div class="row"><div><label>Hot threshold (0-1)</label>${num("hot",t.hot_min,"0.05")}</div><div><label>Warm threshold (0-1)</label>${num("warm",t.warm_min,"0.05")}</div></div>
+   <label><input type="checkbox" id="r1" style="width:auto" ${r.auto_disqualify_if_need_0?"checked":""}> Cold/disqualify when Need = 0</label>
+   <label><input type="checkbox" id="r2" style="width:auto" ${r.require_authority_ge_1?"checked":""}> Hot requires Authority &ge; 1</label></div></div>
+   <div class="flex" style="margin-top:14px"><button class="pri" id="save">Save configuration</button><span class="note">Changes apply to the next lead processed.</span></div>`;
+  $("#save").onclick=async()=>{try{const v=id=>$("#"+id).value;
+    S.cfg=await api(`/clients/${S.client}/config`,{method:"PUT",body:JSON.stringify({
+     settings:{require_human_approval:$("#hum").checked,routing_strategy:v("rs"),default_calendar_link:v("cal")||null},
+     icp:{target_industries:unc(v("ti")),exclude_industries:unc(v("ei")),company_size_min:+v("smin"),company_size_max:+v("smax"),target_regions:unc(v("tr")),target_titles:unc(v("tt")),ideal_use_cases:unc(v("uc"))},
+     bant:{weights:{budget:+v("wb"),authority:+v("wa"),need:+v("wn"),timeline:+v("wt")},score_thresholds:{hot_min:+v("hot"),warm_min:+v("warm")},rules:{auto_disqualify_if_need_0:$("#r1").checked,require_authority_ge_1:$("#r2").checked}}})});
+    toast("Configuration saved");vCfg()}catch(e){toast("Save failed: "+e.message)}};
+}
+
+/* ---------- Lead drawer ---------- */
+const closeD=()=>{$("#drawer").classList.remove("open");$("#scrim").classList.remove("open")};
+$("#scrim").onclick=closeD;document.addEventListener("keydown",e=>e.key==="Escape"&&closeD());
+async function openLead(id){
+  $("#drawer").innerHTML='<div class="note">Loading...</div>';$("#drawer").classList.add("open");$("#scrim").classList.add("open");
+  try{const d=await api("/leads/"+id);const L=d.lead,Q=d.qualification,M=d.meeting;
+   const dim=(n,x)=>`<div class="dim"><div class="top"><span>${n}</span><span>${x.score}/3</span></div><div class="pips">${[1,2,3].map(i=>`<i class="${i<=x.score?"f":""}"></i>`).join("")}</div>
+     <ul>${x.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}${x.signals.length?`<li><i>signals:</i> ${esc(x.signals.join(", "))}</li>`:""}</ul></div>`;
+   const pend=L.status==="pending_approval";
+   $("#drawer").innerHTML=`<div class="flex"><h2 style="font-size:18px;margin:0">${esc(L.name||"(no name)")}</h2>${chip(Q&&Q.label)}${st(L.status)}<button class="right" id="x">Close</button></div>
+   <div class="note">${esc(L.title)} ${L.company?"at "+esc(L.company):""} &middot; ${esc(L.email||L.phone||"")} &middot; via ${esc(L.source)} &middot; verification: ${esc(L.verification_status||"n/a")}</div>
+   ${Q?`<div class="grid kpis" style="margin:14px 0;grid-template-columns:repeat(3,1fr)"><div class="card kpi"><div class="v">${Q.total_score}</div><div class="l">Total</div></div><div class="card kpi"><div class="v">${Q.fit_score}</div><div class="l">ICP fit</div></div><div class="card kpi"><div class="v">${Q.intent_score}</div><div class="l">Intent (BANT)</div></div></div>
+   <p style="margin:6px 0"><b>Why:</b> ${esc(Q.reasoning)}</p><div class="note">Next step: <b>${esc(Q.next_step.replace(/_/g," "))}</b> &middot; method: ${esc(Q.scoring_method)} &middot; owner: ${esc(L.owner_id||"unassigned")}</div>
+   ${dim("Budget",Q.budget)}${dim("Authority",Q.authority)}${dim("Need",Q.need)}${dim("Timeline",Q.timeline)}`:'<p class="note">Not qualified yet (duplicate or not processed).</p>'}
+   ${M?`<div class="card" style="margin:12px 0"><b>Meeting</b> &middot; ${esc(M.status)}${M.scheduled_for?" &middot; "+esc(fmt(M.scheduled_for)):""}<div class="note">${esc(M.calendar_link)}</div>${M.status==="proposed"?`<div class="flex" style="margin-top:10px"><input type="datetime-local" id="mt" style="max-width:230px"><button id="mb">Mark as booked</button><span class="note">when the lead confirms a slot</span></div>`:""}</div>`:""}
+   ${pend?`<div class="card" style="margin:12px 0;border-color:var(--brand)"><h2>Awaiting your approval</h2><textarea id="ed">${esc(L.draft_response||"")}</textarea>
+     <div class="flex" style="margin-top:10px"><button class="pri" id="ap">Approve &amp; send</button><button class="danger" id="rj">Reject</button></div></div>`:""}
+   <h2 style="margin-top:18px">Conversation</h2>${d.conversation.map(m=>`<div class="msg ${esc(m.role)}"><small>${esc(m.role)} &middot; ${esc(m.channel)} &middot; ${esc(fmt(m.timestamp))}</small>${esc(m.content)}</div>`).join("")||'<div class="note">No messages.</div>'}
+   ${Q?`<h2 style="margin-top:18px">Override score</h2><div class="row"><div><label>Label</label><select id="ol"><option value="">(keep)</option><option>Hot</option><option>Warm</option><option>Cold</option></select></div>
+     <div><label>Total score 0-100</label><input id="os" type="number" min="0" max="100"></div></div><label>Reason (audited)</label><input id="or"><div style="margin-top:10px"><button id="ov">Apply override</button></div>`:""}
+   <h2 style="margin-top:18px">Audit trail</h2><div class="tl">${d.audit_trail.map(a=>`<div><b>${esc(a.action.replace(/_/g," "))}</b> <small>${esc(a.actor)} &middot; ${esc(fmt(a.timestamp))}</small></div>`).join("")}</div>`;
+   $("#x").onclick=closeD;
+   const act=async(fn,msg)=>{try{await fn();toast(msg);await load();openLead(id)}catch(e){toast("Failed: "+e.message)}};
+   if(pend){$("#ap").onclick=()=>act(()=>api(`/leads/${id}/approve`,{method:"POST",body:JSON.stringify({approve:true,message:$("#ed").value,actor:"admin-ui"})}),"Approved and sent");
+     $("#rj").onclick=()=>act(()=>api(`/leads/${id}/approve`,{method:"POST",body:JSON.stringify({approve:false,actor:"admin-ui"})}),"Rejected")}
+   if(M&&M.status==="proposed")$("#mb").onclick=()=>{const v=$("#mt").value;if(!v)return toast("Pick the meeting time first");act(()=>api(`/leads/${id}/meeting/confirm`,{method:"POST",body:JSON.stringify({scheduled_for:new Date(v).toISOString(),actor:"admin-ui"})}),"Meeting marked as booked")};
+   if(Q)$("#ov").onclick=()=>act(()=>api(`/leads/${id}/override`,{method:"POST",body:JSON.stringify({label:$("#ol").value||null,total_score:$("#os").value===""?null:+$("#os").value,reason:$("#or").value,actor:"admin-ui"})}),"Override saved");
+  }catch(e){$("#drawer").innerHTML=`<div class="note">Failed to load: ${esc(e.message)}</div><button id="x">Close</button>`;$("#x").onclick=closeD}
+}
+boot().catch(e=>{$("#view").innerHTML=`<div class="card empty">Cannot reach the API: ${esc(e.message)}</div>`});
+</script>
+</body>
+</html>
