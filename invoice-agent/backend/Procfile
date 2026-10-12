@@ -1,0 +1,7 @@
+# No Docker, per project decision. This Procfile documents the processes a
+# production host (systemd, a process manager, or `honcho start`) needs to
+# run. Each line is `<name>: <command>`.
+
+web: uvicorn app.main:app --host 0.0.0.0 --port 8000
+worker: celery -A app.tasks.celery_app worker --loglevel=info
+beat: celery -A app.tasks.celery_app beat --loglevel=info
