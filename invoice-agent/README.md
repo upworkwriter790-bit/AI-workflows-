@@ -12,12 +12,15 @@ AI-assisted, post-payment invoice automation for two use cases only:
 Payment collection, Accounts Payable, and supplier-payment automation are
 explicitly **out of scope** — see `docs/architecture.md`.
 
-This is **Phase 1 only** (project scaffold, DB schema, audit log, mock
-CRM/ERP/email/operations/product-access adapters, health endpoint). Phases
-2–5 (webhook intake, GST calculation, PDF generation, real integrations,
-Claude/LLM extraction wiring, admin dashboard, production hardening) are not
-yet built — see `docs/test-plan.md` and the phase list at the bottom of this
-file.
+**Phases 1 and 2 are built.** Phase 1: project scaffold, DB schema, audit
+log, mock CRM/ERP/email/operations/product-access adapters, health
+endpoint. Phase 2: the paid-order webhook, idempotency, GST tax
+calculation, invoice numbering, and branded PDF generation — a real paid
+order now produces a real, GST-compliant invoice PDF saved to local
+storage, deterministically, with no LLM involved. Phases 3–5 (real
+CRM/ERP/email integrations, Operations/product-access flow, admin
+dashboard, Use Case 2 document review, production hardening) are not yet
+built — see `docs/test-plan.md` and the phase list below.
 
 ## No Docker
 
@@ -61,12 +64,21 @@ source .venv/bin/activate
 python -m pytest -q
 ```
 
-25 tests cover: health endpoint + live-invoicing-readiness gate, every DB
+51 tests cover: health endpoint + live-invoicing-readiness gate, every DB
 model round-tripping through SQLAlchemy, all five mock adapters (CRM, ERP,
 email, Operations, product-access), HMAC webhook-signature verification
 (valid / tampered / stale timestamp), structured-log redaction (API keys,
-GSTINs, emails), and the multi-provider LLM client's provider-selection and
-JSON-extraction logic.
+GSTINs, emails), the multi-provider LLM client's provider-selection and
+JSON-extraction logic, GST calculation (intra-state CGST+SGST, inter-state
+IGST, tax-inclusive/exclusive, discounts), financial-year-scoped sequential
+invoice numbering, amount-in-words, the full order workflow (valid order →
+`INVOICE_PDF_GENERATED`, missing company config → `VALIDATION_FAILED`, tax
+mismatch → `MANUAL_REVIEW_REQUIRED`, inter-state IGST, sequential numbering
+across orders, missing required item field → `VALIDATION_FAILED`), and the
+webhook endpoint end-to-end (valid webhook creates exactly one invoice,
+repeated `event_id` → 409 with no duplicate, same `order_id` different
+`event_id` → 409, invalid/missing signature → 401, invalid schema → 400,
+tax mismatch via the real HTTP path → `MANUAL_REVIEW_REQUIRED`).
 
 ### Linting
 
@@ -118,11 +130,17 @@ Before `ENVIRONMENT=production`:
 
 ## Phases (see docs for detail)
 
-1. ✅ Scaffold, DB models, audit log, mock adapters, health check — **this repo, now**.
-2. Paid-order webhook, GST rules, invoice numbering, PDF generation.
+1. ✅ Scaffold, DB models, audit log, mock adapters, health check.
+2. ✅ Paid-order webhook, GST rules, invoice numbering, PDF generation.
 3. Real ERP/CRM/email adapters, Operations task flow, admin dashboard.
 4. Received-document intake, LLM extraction, deterministic decision engine, review queue.
 5. Production hardening: RBAC, rate limits, metrics, deployment.
+
+Phase 2 note: the workflow runs through `INVOICE_PDF_GENERATED` and then
+stops there by design — it does not yet call the ERP/email/Operations
+adapters (those are real adapters' job in Phase 3; wiring them in now
+would mean calling mock adapters from production workflow code, which is
+not the same thing as the real integration the spec asks for).
 
 ## Docs
 

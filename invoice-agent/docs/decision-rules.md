@@ -22,8 +22,12 @@ Every generated invoice must carry (Phase 2, `app/services/gst/`):
 15. Template version + PDF SHA-256, for audit traceability (not prominent to the customer).
 
 Time-limit rule (CBIC): service invoices must issue within 30 days of
-supply (45 days for insurers/banks/NBFCs) — a backend validation rule in
-Phase 2, not merely a UI reminder.
+supply (45 days for insurers/banks/NBFCs). **Not implemented as an
+explicit check** — Phase 2's workflow always issues the invoice the same
+day the paid-order webhook arrives, so this limit is satisfied by
+construction, not by a runtime guard. If a future requirement introduces
+delayed/batched invoice generation, this needs its own validation rule
+before that happens — it is not covered today.
 
 ## Tax calculation (deterministic, never the LLM)
 

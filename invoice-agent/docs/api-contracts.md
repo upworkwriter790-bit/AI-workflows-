@@ -1,9 +1,8 @@
 # API contracts
 
-Phase 1 ships only `/health`. Everything else below is the **contract this
-system commits to building in Phase 2+** — documented now so the shape is
-agreed before code exists, per the spec's own instruction not to begin
-implementation past the current phase without sign-off.
+Phase 1 shipped `/health`. Phase 2 adds the paid-order webhook below.
+Everything else is the **contract this system commits to building in
+Phase 3+** — documented now so the shape is agreed before code exists.
 
 ## Implemented (Phase 1)
 
@@ -28,33 +27,46 @@ No auth. Returns:
 `Settings.missing_live_invoicing_fields()` is set — this is the literal
 enforcement of "never invent business/tax values."
 
-## Planned — Use Case 1 (Phase 2)
+## Implemented (Phase 2)
 
 ### `POST /api/v1/webhooks/crm/order-paid`
 
-Auth: HMAC-SHA256 over `"{timestamp}.{raw_body}"` using
-`CRM_WEBHOOK_HMAC_SECRET` (see `app/core/security.py`, already implemented
-and unit-tested in Phase 1). Headers (exact names to be finalized against
-the real CRM's webhook signer):
+`app/api/webhooks.py`. Auth: HMAC-SHA256 over `"{timestamp}.{raw_body}"`
+using `CRM_WEBHOOK_HMAC_SECRET` (`app/core/security.py`). Headers (exact
+names to be finalized against the real CRM's webhook signer once chosen):
 
 - `X-Signature: <hex hmac>`
 - `X-Timestamp: <unix epoch seconds>`
 
 Request body: the `order.paid` schema from spec §8 (event_id, event_type,
 occurred_at, order_id, customer_id, payment_status, payment_reference,
-currency, customer{...}, items[...], pricing{...}).
+currency, customer{...}, items[...], pricing{...}) — enforced by
+`app/schemas/order_webhook.py`.
 
 Responses:
 
 | Status | Condition |
 |---|---|
-| 202 | Signature valid, schema valid, not a replay → queued for async processing |
-| 400 | Schema validation failed |
-| 401 | Invalid signature or timestamp outside allowed skew |
-| 409 | `event_id`/idempotency key already processing or completed |
+| 202 | Signature valid, schema valid, not a replay → `Order`+`Invoice` rows created, Celery task enqueued |
+| 400 | Schema validation failed (missing/malformed field) |
+| 401 | Missing/invalid signature headers, or timestamp outside allowed skew |
+| 409 | `event_id` already processing/completed, **or** an `Order` for this `order_id` already exists (covers a replay that reuses a fresh `event_id`) |
 
-Processing is asynchronous after the 202 — the HTTP response never waits on
-GST calculation, PDF generation, ERP sync, or email send.
+Processing past the 202 is asynchronous (Celery) — the HTTP response never
+waits on GST calculation, PDF generation, or (Phase 3) ERP sync / email
+send. The enqueued workflow (`app/workflows/order_workflow.py`) runs
+through this state machine, stopping at `INVOICE_PDF_GENERATED`:
+
+```
+PAID_ORDER_RECEIVED -> ORDER_DATA_VALIDATED -> TAX_CALCULATED
+  -> INVOICE_NUMBER_RESERVED -> INVOICE_PDF_GENERATED
+```
+
+with failure states `VALIDATION_FAILED`, `TAX_VALIDATION_FAILED`, and
+`MANUAL_REVIEW_REQUIRED` (tax mismatch beyond `TAX_MISMATCH_TOLERANCE`) —
+every transition writes an `AuditEvent`.
+
+## Planned — Use Case 1 (Phase 3)
 
 ### `POST /api/v1/email/delivery-webhook` (provider-specific)
 

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tax Invoice {{ invoice_number }}</title>
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  body { font-family: "Helvetica", "Arial", sans-serif; font-size: 10.5pt; color: #1a1a1a; }
+  .header { display: flex; justify-content: space-between; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px; margin-bottom: 10px; }
+  .header .brand { display: flex; align-items: center; gap: 10px; }
+  .header img.logo { height: 48px; }
+  .header h1 { font-size: 16pt; letter-spacing: 1px; margin: 0; }
+  .meta-table, .party-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .meta-table td { vertical-align: top; padding: 2px 0; }
+  .party-table td { width: 50%; vertical-align: top; padding-right: 12px; }
+  .party-box { border: 1px solid #ccc; padding: 8px; border-radius: 4px; min-height: 70px; }
+  .party-box h3 { margin: 0 0 4px 0; font-size: 9.5pt; text-transform: uppercase; color: #555; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  table.items th, table.items td { border: 1px solid #ccc; padding: 4px 6px; font-size: 9pt; text-align: left; }
+  table.items th { background: #f2f2f2; text-align: left; }
+  table.items td.num, table.items th.num { text-align: right; }
+  .summary-table { width: 40%; margin-left: 60%; border-collapse: collapse; margin-top: 8px; }
+  .summary-table td { padding: 3px 6px; font-size: 9.5pt; }
+  .summary-table td.num { text-align: right; }
+  .summary-table tr.grand-total td { font-weight: bold; border-top: 2px solid #1a1a1a; font-size: 11pt; }
+  .words-row { margin-top: 6px; font-size: 9.5pt; font-style: italic; }
+  .footer { margin-top: 24px; font-size: 8.5pt; color: #555; }
+  .footer .signature { margin-top: 36px; text-align: right; }
+  .footer .signature .line { border-top: 1px solid #1a1a1a; width: 220px; margin-left: auto; padding-top: 4px; }
+  .note { font-size: 9pt; margin-top: 6px; }
+  .trace { margin-top: 18px; font-size: 7pt; color: #999; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">
+    {% if logo_path %}<img class="logo" src="{{ logo_path }}" alt="logo" />{% endif %}
+    <div>
+      <strong>{{ company_legal_name }}</strong><br />
+      {{ company_registered_address }}<br />
+      GSTIN: {{ seller_gstin }}{% if support_email %} &middot; {{ support_email }}{% endif %}{% if support_phone %} &middot; {{ support_phone }}{% endif %}
+    </div>
+  </div>
+  <div style="text-align:right;">
+    <h1>TAX INVOICE</h1>
+    <table class="meta-table">
+      <tr><td>Invoice No.</td><td style="text-align:right;"><strong>{{ invoice_number }}</strong></td></tr>
+      <tr><td>Invoice Date</td><td style="text-align:right;">{{ invoice_date }}</td></tr>
+      {% if order_id %}<tr><td>Order ID</td><td style="text-align:right;">{{ order_id }}</td></tr>{% endif %}
+      {% if payment_reference %}<tr><td>Payment Ref.</td><td style="text-align:right;">{{ payment_reference }}</td></tr>{% endif %}
+      <tr><td>Due</td><td style="text-align:right;">Paid</td></tr>
+    </table>
+  </div>
+</div>
+
+<table class="party-table">
+  <tr>
+    <td>
+      <div class="party-box">
+        <h3>Bill To</h3>
+        <strong>{{ customer_name }}</strong><br />
+        {{ billing_address_lines | join("<br />") | safe }}<br />
+        {% if customer_gstin %}GSTIN: {{ customer_gstin }}<br />{% endif %}
+        Place of Supply: {{ place_of_supply }} ({{ customer_state_code }})
+      </div>
+    </td>
+    <td>
+      {% if shipping_address_lines %}
+      <div class="party-box">
+        <h3>Ship To</h3>
+        {{ shipping_address_lines | join("<br />") | safe }}
+      </div>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Description</th>
+      <th>HSN/SAC</th>
+      <th class="num">Qty</th>
+      <th class="num">Rate</th>
+      <th class="num">Discount</th>
+      <th class="num">Taxable</th>
+      <th class="num">GST %</th>
+      {% if is_inter_state %}
+      <th class="num">IGST</th>
+      {% else %}
+      <th class="num">CGST</th>
+      <th class="num">SGST</th>
+      {% endif %}
+      <th class="num">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in line_items %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ line.description }}</td>
+      <td>{{ line.hsn_or_sac_code }}</td>
+      <td class="num">{{ line.quantity }} {{ line.unit }}</td>
+      <td class="num">{{ "%.2f"|format(line.unit_price) }}</td>
+      <td class="num">{{ "%.2f"|format(line.discount_amount) }}</td>
+      <td class="num">{{ "%.2f"|format(line.taxable_value) }}</td>
+      <td class="num">{{ line.gst_rate }}%</td>
+      {% if is_inter_state %}
+      <td class="num">{{ "%.2f"|format(line.igst_amount) }}</td>
+      {% else %}
+      <td class="num">{{ "%.2f"|format(line.cgst_amount) }}</td>
+      <td class="num">{{ "%.2f"|format(line.sgst_amount) }}</td>
+      {% endif %}
+      <td class="num">{{ "%.2f"|format(line.line_total) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<table class="summary-table">
+  <tr><td>Subtotal</td><td class="num">{{ "%.2f"|format(subtotal) }}</td></tr>
+  <tr><td>Discount</td><td class="num">{{ "%.2f"|format(discount_total) }}</td></tr>
+  <tr><td>Taxable Value</td><td class="num">{{ "%.2f"|format(taxable_total) }}</td></tr>
+  {% if is_inter_state %}
+  <tr><td>IGST</td><td class="num">{{ "%.2f"|format(igst_total) }}</td></tr>
+  {% else %}
+  <tr><td>CGST</td><td class="num">{{ "%.2f"|format(cgst_total) }}</td></tr>
+  <tr><td>SGST</td><td class="num">{{ "%.2f"|format(sgst_total) }}</td></tr>
+  {% endif %}
+  {% if cess_total %}<tr><td>Cess</td><td class="num">{{ "%.2f"|format(cess_total) }}</td></tr>{% endif %}
+  <tr class="grand-total"><td>Grand Total ({{ currency }})</td><td class="num">{{ "%.2f"|format(grand_total) }}</td></tr>
+</table>
+
+<div class="words-row">Amount in words: {{ amount_in_words }}</div>
+
+{% if reverse_charge_applicable %}
+<div class="note"><strong>Tax is payable on reverse-charge basis.</strong></div>
+{% endif %}
+{% if is_inter_state %}
+<div class="note">Place of Supply: {{ place_of_supply }}</div>
+{% endif %}
+<div class="note">Payment Status: Received{% if payment_reference %} (Ref: {{ payment_reference }}){% endif %}.</div>
+
+<div class="footer">
+  <div>For queries, contact {{ support_email }}{% if support_phone %} / {{ support_phone }}{% endif %}.</div>
+  <div>This is a system-generated tax invoice issued under GST.</div>
+  <div class="signature">
+    For {{ company_legal_name }}
+    <div class="line">Authorized Signatory</div>
+  </div>
+  <div class="trace">
+    Template v{{ template_version }} &middot; Generated {{ generated_at }} &middot; Internal ref {{ internal_invoice_id }}
+  </div>
+</div>
+
+</body>
+</html>

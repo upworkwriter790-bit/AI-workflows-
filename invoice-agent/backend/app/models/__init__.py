@@ -8,6 +8,7 @@ from app.models.decision import Decision
 from app.models.idempotency import IdempotencyRecord
 from app.models.invoice import Invoice
 from app.models.invoice_line_item import InvoiceLineItem
+from app.models.invoice_sequence import InvoiceSequence
 from app.models.order import Order
 from app.models.product import Product
 from app.models.received_document import ReceivedDocument
@@ -19,6 +20,7 @@ __all__ = [
     "IdempotencyRecord",
     "Invoice",
     "InvoiceLineItem",
+    "InvoiceSequence",
     "Order",
     "Product",
     "ReceivedDocument",
