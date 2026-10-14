@@ -18,6 +18,64 @@ Failure/review states: `INVALID_REQUEST`, `FILE_REJECTED`, `EMAIL_FAILED`,
 `WHATSAPP_FAILED`, `PARTIALLY_DELIVERED`, `RETRY_SCHEDULED`, `CANCELLED`,
 `EXPIRED`.
 
+## Generated-invoice state machine (spec §6, Method B only)
+
+```
+REQUEST_RECEIVED -> REQUEST_VALIDATED -> AMOUNTS_CALCULATED
+  -> TOTALS_VALIDATED -> INVOICE_NUMBER_RESERVED -> PDF_RENDERED
+  -> PDF_STORED -> INVOICE_DOCUMENT_CREATED -> DELIVERY_CREATED
+  -> DELIVERY_QUEUED -> EMAIL_QUEUED and/or WHATSAPP_QUEUED
+  -> DELIVERY_COMPLETED
+```
+
+Failure states: `INVALID_REQUEST`, `CALCULATION_FAILED`,
+`TOTAL_MISMATCH`, `INVOICE_NUMBER_RESERVATION_FAILED`,
+`PDF_RENDER_FAILED`, `STORAGE_FAILED`, `DELIVERY_PARTIALLY_COMPLETED`,
+`DELIVERY_FAILED`, `MANUAL_REVIEW_REQUIRED`.
+
+Tracked on `GeneratedInvoice.status`, which the workflow
+(`app/workflows/generated_invoice_workflow.py`) advances through
+`DELIVERY_QUEUED` and then stops — delivery-level progress from that
+point on (`EMAIL_SENT`, `COMPLETED`, `PARTIALLY_DELIVERED`, etc.) is
+tracked on the shared `InvoiceDelivery.status` exactly as it is for
+Method A, per spec §2's "both flows must share the same delivery...
+implementation." This is a documented interpretation: the spec lists
+`DELIVERY_COMPLETED` as a `GeneratedInvoice`-side state, but duplicating
+that tracking on two rows risked the two statuses drifting apart, so
+only one row (`InvoiceDelivery`) owns delivery-outcome truth.
+
+Immutability (spec §6): once `GeneratedInvoice.generated_at` is set,
+application code never updates `invoice_number`, any financial column,
+`calculation_snapshot_json`, or `pdf_sha256` again. A failed email/
+WhatsApp send never regenerates the PDF or reserves a new number — it
+only creates/updates `DeliveryAttempt` rows. A future correction needs
+its own credit-note/replacement design; this codebase does not implement
+one, and `voided_at` exists on the model as a placeholder for it.
+
+### Idempotency (Method B)
+
+`GeneratedInvoice.idempotency_key` is DB-unique. The workflow inserts a
+row for a new key and lets the unique-constraint violation (not a
+separate lookup) detect a repeat. A repeat call with the same key always
+returns the ORIGINAL outcome — success or failure. If the original
+request failed validation, the fix is a new `idempotency_key` with
+corrected data, not a retry under the same key. Separately,
+`(external_reference, payment_reference)` is also DB-unique — a
+*different* key reusing the same transaction pair is rejected, since that
+pairing identifies one real-world transaction regardless of what key the
+caller chose for it.
+
+### Product/tax catalog cross-check
+
+When a line item supplies `item_reference`, the workflow requires an
+active `ProductCatalogItem` with that `internal_reference` whose
+`hsn_or_sac_code` and `gst_rate` match the submitted values exactly — a
+mismatch is `INVALID_REQUEST`. An item with no `item_reference` is
+accepted using its own submitted fields, per the spec's JSON schema
+(`item_reference` is optional) — tightening this to *require* a catalog
+match for every line is a calling-code decision, not something this
+backend enforces unilaterally today.
+
 Implementation note: `RECEIVED` → `FILE_STORED` happen inline inside the
 intake endpoint before any DB row exists for the delivery itself (the
 file must be valid and stored before anything else can happen — rule 1).

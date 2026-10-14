@@ -48,9 +48,15 @@ def harness(tmp_path, monkeypatch):
     settings = Settings(
         STORAGE_LOCAL_DIR=str(tmp_path / "storage"),
         SUPPORT_EMAIL="support@test.com",
+        SUPPORT_PHONE="+911234567890",
         COMPANY_LEGAL_NAME="Test Co Pvt Ltd",
+        COMPANY_REGISTERED_ADDRESS="123 Test St, Mumbai",
+        SELLER_GSTIN="27AAAAA0000A1Z5",
+        SELLER_STATE_NAME="Maharashtra",
+        SELLER_STATE_CODE="27",
         APP_BASE_URL="http://test.local",
         JWT_SECRET="test-jwt-secret",
+        PDF_RENDERER="weasyprint",
     )
 
     def _get_db_override():

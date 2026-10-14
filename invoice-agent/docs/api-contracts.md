@@ -38,6 +38,35 @@ Optional fields: `external_reference`, `invoice_number`, `source`
 Response body: `{"delivery_id", "correlation_id", "status",
 "requested_channels", "created_at"}`.
 
+## `POST /api/v1/generated-invoice-deliveries`
+
+Auth: `ADMIN` or `DELIVERY_MANAGER`. `application/json`, schema in
+`app/schemas/generated_invoice_request.py` — exact shape in spec §4.
+Every nested object uses `extra="forbid"`, which is also the mechanism
+enforcing "do not accept card/bank/UPI/CVV data": any field not in the
+schema (including those) is rejected before it reaches a database or log.
+
+| Status | Condition |
+|---|---|
+| 202 | Accepted; invoice generated, PDF stored, delivery queued |
+| 200 or 202 | Same `idempotency_key` as a prior successful request — returns the original invoice/delivery, generates nothing new |
+| 422 | Schema violation (negative amount, missing required field, unknown field, non-PAID `payment_status`), contact-field-for-channel missing, product-catalog mismatch, seller identity not configured, or `TOTAL_MISMATCH` (computed vs. submitted totals differ beyond `TAX_TOLERANCE_AMOUNT`) |
+| 401 / 403 | Same as the Method A endpoint |
+
+A **different** `idempotency_key` reusing the same `external_reference` +
+`payment_reference` pair is also a 422 — that pairing is unique per spec
+§5 (`generated_invoices.uq_generated_invoice_refs`).
+
+Response body matches spec §4's example: `{"delivery_id", "document_id",
+"invoice_id", "invoice_number", "correlation_id", "status",
+"requested_channels", "created_at"}`.
+
+## `GET/POST/PATCH /api/v1/product-catalog`
+
+`GET`: any role. `POST`/`PATCH`: `ADMIN` only. Backs the catalog
+cross-check in `generated_invoice_workflow.py` — see
+`docs/delivery-rules.md`.
+
 ## `GET /api/v1/invoice-deliveries`
 
 Auth: any of `ADMIN`/`DELIVERY_MANAGER`/`DELIVERY_VIEWER`. Query params:

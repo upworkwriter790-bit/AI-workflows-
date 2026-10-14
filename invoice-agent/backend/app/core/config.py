@@ -62,14 +62,66 @@ class Settings(BaseSettings):
     retry_max_attempts: int = Field(default=4, alias="RETRY_MAX_ATTEMPTS")
     retry_schedule_minutes: str = Field(default="1,5,30,120", alias="RETRY_SCHEDULE_MINUTES")
 
-    # Used only in email body text / dashboard branding — never interpreted,
-    # never written onto the invoice itself (the PDF already exists).
+    # Company identity. For Method A (existing-PDF delivery) these are used
+    # only in email/WhatsApp copy, never written onto the invoice itself.
+    # For Method B (generated invoices) these are the ONLY source of
+    # seller details on the rendered PDF — never taken from the request
+    # body, never invented (spec §7 rule 2).
     company_legal_name: str | None = Field(default=None, alias="COMPANY_LEGAL_NAME")
+    company_registered_address: str | None = Field(default=None, alias="COMPANY_REGISTERED_ADDRESS")
+    seller_gstin: str | None = Field(default=None, alias="SELLER_GSTIN")
+    seller_state_name: str | None = Field(default=None, alias="SELLER_STATE_NAME")
+    seller_state_code: str | None = Field(default=None, alias="SELLER_STATE_CODE")
     support_email: str | None = Field(default=None, alias="SUPPORT_EMAIL")
+    support_phone: str | None = Field(default=None, alias="SUPPORT_PHONE")
+    company_logo_url: str | None = Field(default=None, alias="COMPANY_LOGO_URL")
+
+    # Invoice numbering (Method B only — Method A never reserves a number)
+    invoice_prefix: str = Field(default="INV", alias="INVOICE_PREFIX")
+    invoice_number_format: str = Field(
+        default="{prefix}/FY{fy_start_short}-{fy_end_short}/{sequence}",
+        alias="INVOICE_NUMBER_FORMAT",
+    )
+    invoice_sequence_padding: int = Field(default=6, alias="INVOICE_SEQUENCE_PADDING")
+    financial_year_start_month: int = Field(default=4, alias="FINANCIAL_YEAR_START_MONTH")
+
+    # Invoice PDF (Method B only)
+    invoice_template_version: str = Field(default="v1", alias="INVOICE_TEMPLATE_VERSION")
+    # Only "weasyprint" is implemented today (see app/services/invoicing/
+    # pdf_renderer.py) — proven to work in this environment without a
+    # browser process. "playwright" is accepted as a config value (the
+    # spec's suggested default) but raises NotImplementedError until a
+    # Playwright-based renderer is actually built.
+    pdf_renderer: str = Field(default="weasyprint", alias="PDF_RENDERER")
+    pdf_timezone: str = Field(default="Asia/Kolkata", alias="PDF_TIMEZONE")
+
+    # Tax rules (Method B only)
+    tax_tolerance_amount: str = Field(default="0.01", alias="TAX_TOLERANCE_AMOUNT")
+    currency: str = Field(default="INR", alias="CURRENCY")
+    rounding_mode: str = Field(default="HALF_UP", alias="ROUNDING_MODE")
+    reverse_charge_applicable: bool = Field(default=False, alias="REVERSE_CHARGE_APPLICABLE")
+
+    # Retention
+    document_retention_days: int = Field(default=90, alias="DOCUMENT_RETENTION_DAYS")
 
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"
+
+    def missing_seller_identity_fields(self) -> list[str]:
+        """Fields that must be real (not None) before Method B can generate
+        a real invoice. An empty list means generation is safe to proceed;
+        a non-empty one means the request must fail closed, never fall
+        back to an invented or blank seller identity.
+        """
+        required = {
+            "company_legal_name": self.company_legal_name,
+            "company_registered_address": self.company_registered_address,
+            "seller_gstin": self.seller_gstin,
+            "seller_state_name": self.seller_state_name,
+            "seller_state_code": self.seller_state_code,
+        }
+        return [name for name, value in required.items() if not value]
 
     @property
     def max_file_size_bytes(self) -> int:

@@ -1,8 +1,8 @@
 # Test plan — Invoice Delivery Agent
 
-49 tests, `backend/app/tests/`. Run: `cd invoice-agent/backend && python -m pytest -q`.
+74 tests, `backend/app/tests/`. Run: `cd invoice-agent/backend && python -m pytest -q`.
 
-## Spec §16 required cases → implementing test
+## Method A (existing-invoice delivery) — spec §16 required cases → implementing test
 
 | # | Case | Test |
 |---|---|---|
@@ -26,6 +26,42 @@
 | 18 | Resend creates a new attempt but not a duplicate document | `test_resend.py::test_resend_creates_new_attempt_not_new_document` |
 | 19 | Sensitive values masked in logs/dashboard list views | `test_invoice_delivery_intake.py::test_recipient_data_masked_in_list_view` + `test_logging_redaction.py` |
 | 20 | Removed CRM/ERP/GST/LLM routes and jobs not reachable/imported | `test_invoice_delivery_intake.py::test_removed_crm_erp_gst_llm_routes_not_reachable` + `test_removed_modules_not_importable_from_live_tree` |
+
+## Method B (payment-details-to-invoice) — spec §13 required cases → implementing test
+
+Cases 1-2 are Method A's, already covered above. All in `test_generated_invoices.py` unless noted.
+
+| # | Case | Test |
+|---|---|---|
+| 3 | Valid payment details generate exactly one invoice PDF | `test_valid_payment_details_generate_exactly_one_pdf` |
+| 4 | Same idempotency key returns the original invoice and delivery | `test_same_idempotency_key_returns_original_invoice_and_delivery` |
+| 5 | Tax-exclusive intra-state calculation is correct | `test_tax_exclusive_intra_state_calculation_is_correct` |
+| 6 | Tax-exclusive inter-state calculation is correct | `test_tax_exclusive_inter_state_calculation_is_correct` |
+| 7 | Tax-inclusive calculation is correct | `test_tax_inclusive_calculation_is_correct` |
+| 8 | Total mismatch stops invoice generation and delivery | `test_total_mismatch_stops_invoice_generation` |
+| 9 | Missing HSN/SAC or GST rate stops the workflow | `test_missing_hsn_or_gst_rate_rejected` |
+| 10 | Invoice numbers unique under concurrent requests | `test_invoice_numbers_unique_across_requests` (sequential proof; see note below on true concurrency) |
+| 11 | Invoice number resets/uses new series per Indian FY | `test_invoicing_numbering.py::test_reserve_invoice_number_resets_per_financial_year` |
+| 12 | Failed email does not regenerate PDF or invoice number | `test_failed_email_does_not_regenerate_pdf_or_invoice_number` |
+| 13 | Failed WhatsApp does not prevent email result from being stored | `test_failed_whatsapp_does_not_prevent_email_result_from_being_stored` |
+| 14 | Delivery pipeline works for both existing and generated invoices | `test_delivery_pipeline_shared_between_both_methods` |
+| 15 | Secure link works for both invoice methods | `test_secure_link_works_for_generated_invoice` (Method A's equivalent is in `test_secure_links.py`) |
+| 16 | Resend creates a new attempt but no new generated invoice/PDF | `test_resend_creates_new_attempt_but_no_new_generated_invoice` |
+| 17 | Sensitive payment data is not accepted or logged | `test_sensitive_payment_fields_are_rejected` |
+| 18 | Removed CRM/ERP/payment-gateway/LLM/OCR routes remain unreachable | `test_removed_routes_still_unreachable` |
+| 19 | PDF output includes the required configured invoice fields | `test_pdf_output_includes_required_fields` |
+| 20 | All amounts use Decimal-safe calculations, not floating-point | `test_amounts_are_decimal_not_float` + every GST-column assertion throughout this file uses `float(...)` only for the *assertion*, never for the stored/computed value |
+
+Two extra cases not in the spec's list but exercised because the schema
+and model design call for them: `test_same_transaction_refs_under_new_idempotency_key_rejected`
+(the `(external_reference, payment_reference)` uniqueness rule, spec §5)
+and `test_catalog_mismatch_rejected` (the product/tax catalog cross-check).
+
+A true **concurrency** test for invoice numbering (parallel threads/
+processes racing `reserve_invoice_number()`) still needs a real
+PostgreSQL instance to exercise `with_for_update()`'s actual row lock —
+SQLite serializes writers anyway, so case 10 above is sequential proof
+of correctness, not a concurrency stress test.
 
 ## Additional tests beyond the required 20
 
