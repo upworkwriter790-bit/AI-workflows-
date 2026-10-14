@@ -1,73 +1,67 @@
-# Test plan
+# Test plan — Invoice Delivery Agent
 
-## Implemented in Phase 1 + 2 (51 tests, `backend/app/tests/`)
+49 tests, `backend/app/tests/`. Run: `cd invoice-agent/backend && python -m pytest -q`.
 
-| Test file | Covers |
-|---|---|
-| `test_health.py` | `/health` returns ok; `live_invoicing_ready` correctly `false` with unset company config |
-| `test_models.py` | Every Phase-1 model round-trips through SQLAlchemy: Customer, Order (unique idempotency key), Invoice + InvoiceLineItem, ReceivedDocument + Decision, AuditEvent, IdempotencyRecord |
-| `test_mock_adapters.py` | CRM (verify/get/notes/ops-task, raises on unknown order), ERP (search-before-create idempotency, status update), Email (send + delivery webhook updates status), Operations + ProductAccess mocks |
-| `test_security.py` | HMAC signature: valid accepted, tampered body rejected, stale timestamp rejected |
-| `test_logging_redaction.py` | API-key-shaped keys redacted, GSTIN pattern redacted in free text, email pattern redacted in free text |
-| `test_llm_client.py` | System-prompt company-name substitution (+ "NOT CONFIGURED" flag when unset), provider selection raises without an API key, raises on an unknown provider, selects the right provider class, JSON extraction from mixed-prose text, rejects non-JSON output |
-| `test_gst_calculator.py` | Intra-state CGST+SGST 50/50 split, inter-state IGST-only, tax-inclusive back-out, discount reducing taxable value, tolerance comparison |
-| `test_gst_numbering.py` | Financial-year label (Apr start, Mar = previous FY), sequential numbering, counter resets per FY |
-| `test_amount_in_words.py` | Simple amount, paise, lakh/crore, zero |
-| `test_order_workflow.py` | Valid order → `INVOICE_PDF_GENERATED` with a PDF whose extracted text contains the real invoice number + company name; missing company config → `VALIDATION_FAILED`; tax mismatch → `MANUAL_REVIEW_REQUIRED`; inter-state order → IGST only; invoice numbers sequential across orders; missing required item field → `VALIDATION_FAILED` |
-| `test_webhooks.py` | Valid webhook → exactly one Order + one Invoice at `INVOICE_PDF_GENERATED`; repeated `event_id` → 409, no duplicate; same `order_id` different `event_id` → 409; invalid/missing signature → 401; invalid schema → 400; tax mismatch via real HTTP path → `MANUAL_REVIEW_REQUIRED` |
+## Spec §16 required cases → implementing test
 
-Run: `cd invoice-agent/backend && python -m pytest -q`
-
-## Required by spec §23 — status after Phase 2
-
-These are the acceptance tests the full spec calls for. Each is listed with
-what it needs before it can be written for real, so nothing here is quietly
-dropped.
-
-| # | Test case | Status |
+| # | Case | Test |
 |---|---|---|
-| 1 | Valid paid order creates exactly one invoice | **Implemented** — `test_webhooks.py::test_valid_webhook_creates_exactly_one_invoice` |
-| 2 | Repeated paid-order webhook creates no duplicate invoice | **Implemented** — `test_webhooks.py::test_repeated_event_id_returns_409_and_creates_no_duplicate` (+ the same-order/different-event-id variant) |
-| 3 | CRM webhook with invalid signature is rejected | **Implemented** — `test_security.py` (unit) + `test_webhooks.py::test_invalid_signature_returns_401` (integration) |
-| 4 | Tax totals mismatch routes to manual review | **Implemented** — `test_order_workflow.py::test_tax_mismatch_routes_to_manual_review` + `test_webhooks.py::test_tax_mismatch_webhook_routes_to_manual_review` |
-| 5 | ERP failure retries without reissuing invoice number/PDF | Needs the real ERP-sync workflow step (Phase 3) — Phase 2's Celery task already retries with exponential backoff on exceptions, but there's no ERP call yet to fail |
-| 6 | Customer email failure is recorded and safely retryable | Email workflow step (Phase 3) |
-| 7 | Operations is not notified before ERP sync succeeds | Order workflow ordering (Phase 3) |
-| 8 | Product access cannot be enabled by the LLM | Enforced structurally: neither `llm_client.py` nor `order_workflow.py` (Phase 2) reference `ProductAccessAdapter` at all — needs an integration test once Phase 3 wires the real call |
-| 9 | Exact duplicate document is rejected | Document-intake hashing (Phase 4) |
-| 10 | Potential duplicate document is held for review | Decision engine (Phase 4) |
-| 11 | Unreadable invoice is held for review | Decision engine + extraction confidence (Phase 4) |
-| 12 | Missing critical field is held for review | Decision engine (Phase 4) |
-| 13 | Valid received invoice/document is accepted only after rule checks pass | Decision engine (Phase 4) |
-| 14 | Manual reviewer override requires reason and creates audit entry | Review API + UI (Phase 4/3) |
-| 15 | Sensitive values are redacted from logs | **Implemented** — `test_logging_redaction.py` |
-| 16 | Invoice PDF contains all required configured fields | **Partially implemented** — `test_order_workflow.py` extracts PDF text and checks invoice number + company name appear; full fixture-by-fixture comparison against the 20 real order examples (spec §25 build-order item 5) still needs real order data |
-| 17 | Invoice numbering remains unique under concurrent requests | **Partially implemented** — `test_gst_numbering.py` + `test_order_workflow.py::test_invoice_numbers_are_sequential_across_orders` prove correctness under sequential calls using `with_for_update()`; a true concurrency test (parallel threads/processes against real PostgreSQL) still needs that real DB, since SQLite serializes writers anyway |
+| 1 | Valid PDF upload queues a delivery | `test_invoice_delivery_intake.py::test_valid_pdf_upload_queues_delivery` |
+| 2 | Non-PDF upload rejected | `test_invoice_delivery_intake.py::test_non_pdf_upload_rejected` |
+| 3 | Oversized file rejected | `test_invoice_delivery_intake.py::test_oversized_file_rejected` |
+| 4 | Missing email rejected when email requested | `test_invoice_delivery_intake.py::test_missing_email_rejected_when_email_requested` |
+| 5 | Invalid E.164 phone rejected when WhatsApp requested | `test_invoice_delivery_intake.py::test_invalid_e164_phone_rejected_when_whatsapp_requested` |
+| 6 | Same idempotency key does not create duplicate delivery | `test_invoice_delivery_intake.py::test_same_idempotency_key_does_not_create_duplicate_delivery` |
+| 7 | Email delivery creates attempt with PDF attachment | `test_delivery_channels.py::test_email_delivery_creates_attempt_with_pdf_attachment` |
+| 8 | WhatsApp delivery creates notification attempt | `test_delivery_channels.py::test_whatsapp_delivery_creates_notification_attempt` |
+| 9 | Email provider success updates status correctly | `test_delivery_channels.py::test_email_provider_delivered_webhook_updates_status` |
+| 10 | WhatsApp delivered/read callback updates status correctly | `test_delivery_channels.py::test_whatsapp_provider_delivered_then_read_callback_updates_status` |
+| 11 | Email failure retries only for retryable errors | `test_delivery_channels.py::test_transient_email_failure_schedules_retry_then_eventually_fails` + `test_permanent_email_failure_does_not_retry` |
+| 12 | WhatsApp failure does not prevent successful email | `test_delivery_channels.py::test_whatsapp_failure_does_not_prevent_successful_email` |
+| 13 | Partial delivery correctly shown | `test_delivery_channels.py::test_partial_delivery_is_correctly_shown_in_detail_view` |
+| 14 | Secure link expires after configured time | `test_secure_links.py::test_secure_link_expires_after_configured_time` |
+| 15 | Revoked secure link cannot be accessed | `test_secure_links.py::test_revoked_secure_link_cannot_be_accessed` |
+| 16 | Secure link respects maximum download count | `test_secure_links.py::test_secure_link_respects_max_download_count` |
+| 17 | Manual resend requires proper role and a resend reason | `test_resend.py::test_resend_requires_manager_or_admin_role` + `test_resend_requires_a_reason` |
+| 18 | Resend creates a new attempt but not a duplicate document | `test_resend.py::test_resend_creates_new_attempt_not_new_document` |
+| 19 | Sensitive values masked in logs/dashboard list views | `test_invoice_delivery_intake.py::test_recipient_data_masked_in_list_view` + `test_logging_redaction.py` |
+| 20 | Removed CRM/ERP/GST/LLM routes and jobs not reachable/imported | `test_invoice_delivery_intake.py::test_removed_crm_erp_gst_llm_routes_not_reachable` + `test_removed_modules_not_importable_from_live_tree` |
 
-## Fixtures still to build (Phase 2/4)
+## Additional tests beyond the required 20
 
-- B2C intra-state invoice / B2B intra-state invoice / B2B inter-state invoice
-- GST-inclusive price order / GST-exclusive price order
-- Email failure / ERP timeout
-- Exact duplicate document / near-duplicate document
-- Unreadable document / wrong-recipient document / unknown-order-reference document
+- `test_file_validation.py` — unit tests for PDF magic-byte/size/extension
+  checks, filename sanitization, and E.164 phone validation in isolation
+  from the HTTP layer.
+- `test_invoice_delivery_intake.py::test_upload_requires_authorized_role` /
+  `test_upload_without_token_rejected` — RBAC on the intake endpoint
+  itself (403 for `DELIVERY_VIEWER`, 401 with no token).
+- `test_resend.py::test_resend_audit_event_records_user_identity_and_reason`
+  — audit-trail content check beyond just "a resend happened."
+- `test_secure_links.py::test_download_route_streams_valid_pdf` /
+  `test_download_route_rejects_unknown_token` — the public `GET /d/{token}`
+  route end-to-end, not just the underlying service function.
+- `test_models.py`, `test_health.py`, `test_security.py`,
+  `test_logging_redaction.py` — carried over from the prior phase, updated
+  for the new schema/scope.
 
 ## Test data policy
 
-- No real customer, GSTIN, or document data in any fixture, ever — all
-  fixtures use clearly fake identifiers (`CUS-TEST-1`, GSTIN patterns that
-  fail real checksum validation on purpose, `test.example.com` emails).
-- Sample PDFs/images for Use Case 2 fixtures are synthetically generated,
-  not scraped or sourced from real invoices.
+No real recipient data, phone numbers, or documents in any fixture.
+Phone numbers use the `+91` country code with an obviously synthetic
+subscriber number; emails use `@example.com`; the test PDF is the
+smallest possible structurally-valid PDF (`%PDF-1.4\n%%EOF`), since this
+system never reads what's inside a PDF anyway.
 
-## User-acceptance checklist (to run once Phase 2–4 land)
+## User-acceptance checklist (once real providers are configured)
 
-- [ ] A real paid-order webhook from the actual CRM produces a correct,
-      GST-compliant invoice PDF reviewed by a human before go-live.
-- [ ] 20 real order examples (per spec §25 build-order item 5) render
-      correctly through the PDF template.
-- [ ] A finance reviewer has walked through the review queue UI for at
-      least one ACCEPT, one HOLD, and one REJECT case.
-- [ ] Dashboards (generated/emailed/ERP-posted/access-enabled/held/
-      rejected/duplicate/failed counts) match a manual count over the same
-      time window.
+- [ ] A real PDF, uploaded through the real intake endpoint, is received
+      correctly in a real inbox with the PDF attached and opens cleanly.
+- [ ] A real WhatsApp utility template, approved by Meta/Twilio, renders
+      correctly on a real device with the right variables substituted.
+- [ ] A deliberately-bounced test email updates the delivery's status via
+      the real provider's webhook within a reasonable time.
+- [ ] A secure link generated against real cloud storage redirects to a
+      working signed URL rather than streaming bytes directly.
+- [ ] An `ADMIN` and a `DELIVERY_MANAGER` user can both complete a manual
+      resend through whatever UI eventually calls this API; a
+      `DELIVERY_VIEWER` cannot.

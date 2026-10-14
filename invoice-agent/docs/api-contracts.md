@@ -1,125 +1,114 @@
-# API contracts
+# API contracts — Invoice Delivery Agent
 
-Phase 1 shipped `/health`. Phase 2 adds the paid-order webhook below.
-Everything else is the **contract this system commits to building in
-Phase 3+** — documented now so the shape is agreed before code exists.
+All routes below are implemented (not planned) unless marked otherwise.
+Auth: Bearer JWT, `Authorization: Bearer <token>`, issued by
+`app.core.auth.create_access_token` against an `InternalUser` row — there
+is no self-serve login endpoint yet (users are seeded directly; adding a
+`/auth/login` endpoint is future work, not in the approved scope).
 
-## Implemented (Phase 1)
+## `GET /health`
 
-### `GET /health`
+No auth. Returns `{"status": "ok", "app_env", "email_provider",
+"whatsapp_provider", "storage_provider"}`.
 
-No auth. Returns:
+## `POST /api/v1/invoice-deliveries`
 
-```json
-{
-  "status": "ok",
-  "environment": "development",
-  "live_invoicing_ready": false,
-  "missing_company_config": ["company_legal_name", "seller_gstin", "..."],
-  "crm_provider": "mock",
-  "erp_provider": "mock",
-  "email_provider": "mock",
-  "llm_provider": "anthropic"
-}
-```
+Auth: `ADMIN` or `DELIVERY_MANAGER`. `multipart/form-data`.
 
-`live_invoicing_ready` is `false` until every required company/tax field in
-`Settings.missing_live_invoicing_fields()` is set — this is the literal
-enforcement of "never invent business/tax values."
+Required fields: `invoice_file` (PDF), `recipient_name`,
+`requested_channels` (repeated form field, one or more of `email`/
+`whatsapp`), `idempotency_key`. `recipient_email` required if `email` is
+requested; `recipient_phone` (E.164) required if `whatsapp` is requested.
 
-## Implemented (Phase 2)
-
-### `POST /api/v1/webhooks/crm/order-paid`
-
-`app/api/webhooks.py`. Auth: HMAC-SHA256 over `"{timestamp}.{raw_body}"`
-using `CRM_WEBHOOK_HMAC_SECRET` (`app/core/security.py`). Headers (exact
-names to be finalized against the real CRM's webhook signer once chosen):
-
-- `X-Signature: <hex hmac>`
-- `X-Timestamp: <unix epoch seconds>`
-
-Request body: the `order.paid` schema from spec §8 (event_id, event_type,
-occurred_at, order_id, customer_id, payment_status, payment_reference,
-currency, customer{...}, items[...], pricing{...}) — enforced by
-`app/schemas/order_webhook.py`.
-
-Responses:
+Optional fields: `external_reference`, `invoice_number`, `source`
+(`INTERNAL_UPLOAD`|`API`|`EMAIL_INTAKE`, default `INTERNAL_UPLOAD`),
+`notes`, `attach_pdf_to_email` (default `true`), `include_download_link`
+(default `true`), `send_whatsapp_notification` (default `true`).
 
 | Status | Condition |
 |---|---|
-| 202 | Signature valid, schema valid, not a replay → `Order`+`Invoice` rows created, Celery task enqueued |
-| 400 | Schema validation failed (missing/malformed field) |
-| 401 | Missing/invalid signature headers, or timestamp outside allowed skew |
-| 409 | `event_id` already processing/completed, **or** an `Order` for this `order_id` already exists (covers a replay that reuses a fresh `event_id`) |
+| 202 | Accepted; file stored, delivery created, channel dispatch enqueued |
+| 200 | Same `idempotency_key` as an already-completed request — returns the existing delivery's current state, creates nothing new |
+| 400 | Non-PDF file, bad magic bytes, oversized file, missing required contact field for a requested channel, invalid E.164 phone |
+| 401 | Missing/invalid bearer token |
+| 403 | Authenticated as `DELIVERY_VIEWER` (upload requires `ADMIN`/`DELIVERY_MANAGER`) |
+| 409 | `idempotency_key` currently mid-processing by another request |
+| 422 | Malformed multipart/missing required field (FastAPI's own validation) |
 
-Processing past the 202 is asynchronous (Celery) — the HTTP response never
-waits on GST calculation, PDF generation, or (Phase 3) ERP sync / email
-send. The enqueued workflow (`app/workflows/order_workflow.py`) runs
-through this state machine, stopping at `INVOICE_PDF_GENERATED`:
+Response body: `{"delivery_id", "correlation_id", "status",
+"requested_channels", "created_at"}`.
 
-```
-PAID_ORDER_RECEIVED -> ORDER_DATA_VALIDATED -> TAX_CALCULATED
-  -> INVOICE_NUMBER_RESERVED -> INVOICE_PDF_GENERATED
-```
+## `GET /api/v1/invoice-deliveries`
 
-with failure states `VALIDATION_FAILED`, `TAX_VALIDATION_FAILED`, and
-`MANUAL_REVIEW_REQUIRED` (tax mismatch beyond `TAX_MISMATCH_TOLERANCE`) —
-every transition writes an `AuditEvent`.
+Auth: any of `ADMIN`/`DELIVERY_MANAGER`/`DELIVERY_VIEWER`. Query params:
+`status_filter`, `source`, `channel`, `search` (matches delivery ID,
+external reference, invoice number, recipient email, or recipient phone).
+Returns `{"deliveries": [...], "count": N}` with `recipient_email` and
+`recipient_phone` masked (e.g. `b***@example.com`,
+`+91*****210`).
 
-## Planned — Use Case 1 (Phase 3)
+## `GET /api/v1/invoice-deliveries/{delivery_id}`
 
-### `POST /api/v1/email/delivery-webhook` (provider-specific)
+Auth: any role. Returns full delivery detail: recipient data
+(unmasked — this is the detail view for an authorized viewer, not the
+masked list view), requested channels, every `DeliveryAttempt` (channel,
+status, provider, provider message ID, error detail, timestamps), and the
+full audit timeline merged across the delivery, its document, and every
+attempt.
 
-Normalizes the configured email provider's delivery/bounce webhook into
-`EmailAdapter.receive_delivery_webhook()`. Exact payload shape depends on
-the chosen `EMAIL_PROVIDER` (SES/Resend/SendGrid each differ) — finalized
-once that provider is chosen.
+## `POST /api/v1/invoice-deliveries/{delivery_id}/resend`
 
-### `POST /api/v1/operations/access-decision`
+Auth: `ADMIN` or `DELIVERY_MANAGER`. Form fields: `channels` (repeated,
+`email`/`whatsapp`), `reason` (required, non-empty). Creates a new
+`DeliveryAttempt` per requested channel (never a new document or
+delivery) and an audit event naming the user and reason. 404 if the
+delivery doesn't exist; 422 if `reason` is empty; 400 for an unknown
+channel name.
 
-Internal-auth only. Body: `{"invoice_id", "action": "APPROVE_AND_ENABLE_ACCESS"|"HOLD_ACCESS"|"REJECT_ACCESS_REQUEST", "actor_id"}`.
-Calls `ProductAccessAdapter.enable_access()` only on
-`APPROVE_AND_ENABLE_ACCESS`, and only after ERP sync has already succeeded.
+## `POST /api/v1/invoice-deliveries/{delivery_id}/cancel`
 
-## Planned — Use Case 2 (Phase 4)
+Auth: `ADMIN` or `DELIVERY_MANAGER`. 409 if the delivery is already
+`COMPLETED` or `CANCELLED`. Otherwise sets status to `CANCELLED` and
+writes an audit event.
 
-### `POST /api/v1/documents/upload`
+## `POST /api/v1/invoice-deliveries/{delivery_id}/secure-link/reissue`
 
-Multipart upload. Body: file + `source_type` (`PORTAL`|`API`|`INTERNAL_UPLOAD`).
-Immediately computes SHA-256, stores the original, checks exact-duplicate,
-and enqueues extraction. Returns `{"document_id", "status": "DOCUMENT_RECEIVED"}`.
+Auth: `ADMIN` or `DELIVERY_MANAGER`. Revokes every currently-active secure
+link for the delivery and issues a new one. Returns
+`{"delivery_id", "download_url", "expires_at", "max_downloads"}`.
 
-### `POST /api/v1/documents/email-intake` (provider webhook)
+## `POST /api/v1/webhooks/email`
 
-Receives a forwarded/parsed inbound-email payload from the dedicated
-invoice inbox, extracts the attachment, and funnels it through the same
-intake path as `/documents/upload`.
+No bearer auth — authenticated via the email provider's own signature
+(`EmailProvider.verify_webhook`). 401 if signature verification fails.
+Body shape is provider-specific; the mock provider's test shape is
+`{"message_id", "event_type": "delivered"|"bounced"|"complaint"|"failed"}`.
+Returns `{"status": "processed"}` or `{"status": "ignored", "reason":
+"no matching attempt for provider_message_id"}` for an unrecognized
+message ID.
 
-### `GET /api/v1/documents/{document_id}`
+## `POST /api/v1/webhooks/whatsapp`
 
-Internal-auth only. Returns `ReceivedDocument` + its `Decision` history +
-audit trail. Never returns raw extraction data to an unauthenticated
-caller — see redaction rules in `docs/deployment.md`.
+No bearer auth — authenticated via Twilio's `X-Twilio-Signature` (mock
+provider always verifies true locally). Accepts Twilio's
+form-urlencoded status-callback shape (`MessageSid`, `MessageStatus`) or
+JSON `{"message_id", "status"}` for direct testing. Same response shape
+as the email webhook.
 
-### `POST /api/v1/documents/{document_id}/review-decision`
+## `GET /d/{opaque_download_token}`
 
-Internal-auth only (`FINANCE_REVIEWER`/`ADMIN` role). Body:
-`{"final_decision": "ACCEPT"|"HOLD_FOR_REVIEW"|"REJECT", "reason": "<required free text>"}`.
-Every override writes a `Decision` row with `decided_by=<user_id>` and an
-`AuditEvent`.
+No auth — the token is the credential. 404 if the token is unknown,
+expired, revoked, or has exhausted its download count (the specific
+reason is logged internally via an audit event, not exposed in the
+response body). On success: streams the PDF directly (local storage) or
+302-redirects to a short-lived signed URL (a real cloud storage adapter).
 
-## Error response shape (all endpoints, once implemented)
+## Explicitly removed/unreachable
 
-```json
-{
-  "error": {
-    "code": "invalid_signature",
-    "message": "human-readable, never includes secrets or full payloads",
-    "correlation_id": "..."
-  }
-}
-```
-
-No endpoint response ever includes a GSTIN, full address, API key, or raw
-document bytes in an error body — see the redaction rules shared with
-logging (`app/core/logging.py`).
+Per the approved scope change, these routes and the modules behind them
+no longer exist in the live app and return 404:
+`/api/v1/webhooks/crm/order-paid` and any CRM/ERP/GST/LLM/document-review/
+Operations/product-access route. See `archive/deprecated/` for the code
+that used to serve them, and
+`app/tests/test_invoice_delivery_intake.py::test_removed_crm_erp_gst_llm_routes_not_reachable`
+for the regression test.

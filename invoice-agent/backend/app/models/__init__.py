@@ -3,25 +3,19 @@ and for the test-suite's `Base.metadata.create_all`.
 """
 
 from app.models.audit_event import AuditEvent
-from app.models.customer import Customer
-from app.models.decision import Decision
+from app.models.delivery_attempt import DeliveryAttempt
 from app.models.idempotency import IdempotencyRecord
-from app.models.invoice import Invoice
-from app.models.invoice_line_item import InvoiceLineItem
-from app.models.invoice_sequence import InvoiceSequence
-from app.models.order import Order
-from app.models.product import Product
-from app.models.received_document import ReceivedDocument
+from app.models.internal_user import InternalUser
+from app.models.invoice_delivery import InvoiceDelivery
+from app.models.invoice_document import InvoiceDocument
+from app.models.secure_download_link import SecureDownloadLink
 
 __all__ = [
     "AuditEvent",
-    "Customer",
-    "Decision",
+    "DeliveryAttempt",
     "IdempotencyRecord",
-    "Invoice",
-    "InvoiceLineItem",
-    "InvoiceSequence",
-    "Order",
-    "Product",
-    "ReceivedDocument",
+    "InternalUser",
+    "InvoiceDelivery",
+    "InvoiceDocument",
+    "SecureDownloadLink",
 ]

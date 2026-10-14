@@ -15,24 +15,29 @@ _REDACT_KEYS = {
     "apikey",
     "secret",
     "password",
+    "password_hash",
     "authorization",
-    "gstin",
     "email",
     "phone",
+    "recipient_email",
+    "recipient_phone",
     "pdf_bytes",
     "raw_document",
-    "hmac_secret",
+    "token_hash",
     "token",
+    "webhook_signing_secret",
+    "auth_token",
+    "jwt_secret",
 }
 
-_GSTIN_RE = re.compile(r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z][A-Z\d]\b")
 _EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+_E164_PHONE_RE = re.compile(r"\+\d{8,15}\b")
 
 
 def _redact_value(value: Any) -> Any:
     if isinstance(value, str):
-        value = _GSTIN_RE.sub("[REDACTED_GSTIN]", value)
         value = _EMAIL_RE.sub("[REDACTED_EMAIL]", value)
+        value = _E164_PHONE_RE.sub("[REDACTED_PHONE]", value)
         return value
     return value
 

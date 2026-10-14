@@ -1,8 +1,9 @@
-"""Idempotency reservation for inbound webhooks and outbound mutating
-calls (ERP posting, email send, Operations notification — Phase 3 reuses
-this same primitive). Backed by `IdempotencyRecord`'s unique
+"""Idempotency reservation, reused across the project regardless of what
+sits on top of it. Backed by `IdempotencyRecord`'s unique
 `(operation_name, idempotency_key)` constraint so a race between two
-concurrent deliveries of the same event can only ever let one through.
+concurrent callers using the same key can only ever let one through.
+Used today by the invoice-delivery intake endpoint to guarantee "same
+`idempotency_key` never creates a duplicate delivery" (spec §6/§12).
 """
 
 from __future__ import annotations
@@ -61,9 +62,17 @@ def reserve(db: Session, *, operation_name: str, idempotency_key: str, request_h
     return ReservationResult(status=ReservationStatus.RESERVED, record=record)
 
 
-def mark_completed(db: Session, record: IdempotencyRecord, *, response_reference: str | None = None) -> None:
+def mark_completed(
+    db: Session,
+    record: IdempotencyRecord,
+    *,
+    response_reference: str | None = None,
+    delivery_id: str | None = None,
+) -> None:
     record.status = "COMPLETED"
     record.response_reference = response_reference
+    if delivery_id is not None:
+        record.delivery_id = delivery_id
     db.add(record)
     db.commit()
 

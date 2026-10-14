@@ -1,143 +1,107 @@
-# Architecture
+# Architecture — Invoice Delivery Agent
 
 ## Scope boundary
 
-This system starts **after** payment has already succeeded. It never
-collects, retries, refunds, or reconciles payments. It only creates,
-validates, sends, records, and reviews invoices. Payment-gateway code,
-Accounts Payable, purchase-order matching, and bank-detail verification are
-explicitly out of scope — if a future request drifts toward any of those,
-that is scope creep to flag, not to quietly build.
+This system never inspects, interprets, extracts, authenticates, or edits
+invoice content. It receives a PDF that already exists, stores it, and
+delivers it. Payment, CRM, ERP, GST, document generation, OCR/LLM
+extraction, decision-making, and product-access/Operations workflows are
+all out of scope — see `README.md` and `archive/deprecated/ARCHIVE_NOTES.md`.
 
 ## Component diagram
 
 ```
-                         ┌───────────────────────────┐
-  CRM / Website ───────▶ │  POST /api/v1/webhooks/    │  (Phase 2)
-  (payment already paid) │  crm/order-paid            │
-                         │  HMAC + timestamp + idemp. │
-                         └──────────────┬─────────────┘
-                                        │ 202 Accepted, then async
-                                        ▼
-                         ┌───────────────────────────┐
-                         │   Celery task queue        │
-                         │   (Redis broker)            │
-                         └──────────────┬─────────────┘
-                                        ▼
-                         ┌───────────────────────────────────────────┐
-                         │          Order Workflow (state machine)    │
-                         │  §9 of spec — PAID_ORDER_RECEIVED → ... →  │
-                         │  COMPLETED, with named failure states      │
-                         └───┬─────┬─────┬─────┬─────┬─────┬─────┬───┘
-                             │     │     │     │     │     │     │
-                     GST Rule│ Inv#│ PDF │ ERP │Email│ CRM │ Ops │
-                     Service │ Svc │ Svc │Adptr│Adptr│write│Adptr│
-                             ▼     ▼     ▼     ▼     ▼     ▼     ▼
-                         ┌───────────────────────────────────────────┐
-                         │   Audit Service → AuditEvent (append-only) │
-                         └───────────────────────────────────────────┘
-                                        │
-                                        ▼
-                         ┌───────────────────────────────────────────┐
-                         │   PostgreSQL: Customer, Product, Order,     │
-                         │   Invoice, InvoiceLineItem, AuditEvent,     │
-                         │   IdempotencyRecord                         │
-                         │   Object storage: PDFs (private + signed URL)│
-                         └───────────────────────────────────────────┘
-
-Separately — Use Case 2:
-
-  Upload portal / email inbox / CRM attachment / API / internal upload
-                                        │
-                                        ▼
-                         ┌───────────────────────────────────────────┐
-                         │  Intake: store original, SHA-256 hash,     │
-                         │  exact-duplicate check (Phase 4)           │
-                         └──────────────┬──────────────────────────┘
-                                        ▼
-                         ┌───────────────────────────────────────────┐
-                         │  LLM Adapter (provider-agnostic):          │
-                         │  Anthropic / OpenAI / OpenRouter / Gemini / │
-                         │  Sarvam — strict JSON-schema extraction     │
-                         │  ONLY. Recommendation, never a decision.   │
-                         └──────────────┬──────────────────────────┘
-                                        ▼
-                         ┌───────────────────────────────────────────┐
-                         │  Deterministic Decision Engine (Phase 4):   │
-                         │  REJECT → HOLD_FOR_REVIEW → ACCEPT order,   │
-                         │  backed by validate_invoice_math,           │
-                         │  validate_required_fields,                  │
-                         │  evaluate_duplicate_rules                   │
-                         └──────────────┬──────────────────────────┘
-                                        ▼
-                  ERP draft (ACCEPT only) / review case (HOLD) /
-                  audit-only record (REJECT) → Admin review queue
+Internal caller (API client / future dashboard UI)
+        │  POST /api/v1/invoice-deliveries  (multipart, JWT-authenticated)
+        ▼
+Invoice Delivery API (FastAPI, app/api/deliveries.py)
+        │
+        ├─ Request validation (app/schemas/delivery_request.py,
+        │    app/services/file_validation.py — PDF magic bytes, size,
+        │    filename sanitization, E.164 phone)
+        ├─ Idempotency guard (app/services/idempotency.py — reused
+        │    unchanged from earlier phases)
+        ├─ Private storage (app/services/storage/ — local disk by
+        │    default, S3-compatible adapter interface ready for a real one)
+        ├─ InvoiceDocument + InvoiceDelivery + DeliveryAttempt rows
+        ├─ Audit event log (app/services/audit/ — reused unchanged)
+        └─ Celery task enqueue (app/tasks/delivery_tasks.py)
+                  │
+                  ▼
+        app/workflows/delivery_workflow.py
+                  │
+                  ├──▶ Email provider adapter (app/services/email/)
+                  │      - attaches the ORIGINAL stored PDF, never regenerated
+                  │      - optional secure download link
+                  │      - provider delivery/bounce/complaint webhooks
+                  │
+                  └──▶ WhatsApp provider adapter (app/services/whatsapp/)
+                         - approved utility/template notification only
+                         - no PDF attachment in v1
+                         - optional secure download link
+                         - provider sent/delivered/read/failed webhooks
+        │
+        ▼
+Internal read API (list/detail) + resend/cancel/reissue actions,
+role-gated (app/core/auth.py: ADMIN / DELIVERY_MANAGER / DELIVERY_VIEWER)
 ```
 
 ## Trust boundaries
 
-1. **LLM ↔ backend.** The LLM (whichever provider is configured) never
-   holds CRM/ERP/email/storage credentials and never calls a live tool
-   directly. It receives document bytes + a system prompt + a JSON schema,
-   and returns a dict. `app/services/document_review/llm_client.py` parses
-   that dict and hands it to the (Phase 4) decision engine — the LLM's own
-   `suggested_recommendation` field is read as input to that engine, never
-   applied as the final decision.
-2. **Webhook ↔ backend.** The CRM-paid-order webhook is HMAC-signed,
-   timestamp-bounded (replay protection), and idempotency-keyed
-   (`app/core/security.py`, Phase 2 endpoint). An invalid signature never
-   reaches the workflow.
-3. **Workflow ↔ ERP/Email/Operations/Product-access.** Every adapter is an
-   `ABC` interface (`app/services/<name>/base.py`) with a `mock`
-   implementation used until a real one is registered in that service's
-   `factory.py`. The workflow layer only ever imports the interface type,
-   never a concrete provider — swapping CRMs or ERPs later never touches
-   workflow code.
-4. **Product access.** Only `ProductAccessAdapter.enable_access()` can
-   activate access, and only Operations (human action) or a configured
-   automatic rule may call it — never the LLM, never a webhook directly.
+1. **Intake auth.** `POST /api/v1/invoice-deliveries` requires a valid JWT
+   for an `ADMIN` or `DELIVERY_MANAGER` user (spec §13's permission table:
+   upload is a `DELIVERY_MANAGER`-level action, not open to `DELIVERY_VIEWER`
+   or anonymous callers).
+2. **Provider webhooks.** Both `/api/v1/webhooks/email` and
+   `/api/v1/webhooks/whatsapp` verify the provider's signature
+   (`EmailProvider.verify_webhook` / `WhatsAppProvider.verify_webhook`)
+   before trusting anything in the payload, and only ever update a
+   `DeliveryAttempt` they can match by the provider's own message ID —
+   an unrecognized message ID is ignored, not guessed at.
+3. **Secure download links.** Only a SHA-256 hash of the opaque token is
+   ever persisted (`app/services/secure_links/service.py`); the raw token
+   exists only in the HTTP response at creation time. `GET /d/{token}`
+   needs no auth of its own — the token itself is the credential — but
+   every access is checked against expiry, revocation, and remaining
+   download count and is logged as an audit event.
+4. **Resend/cancel/reissue.** Require `ADMIN` or `DELIVERY_MANAGER`;
+   every resend requires a non-empty reason and writes an audit event
+   naming the user and the reason (spec §13.3).
+5. **No LLM anywhere.** There is no AI/LLM boundary to manage in this
+   system at all — the single hardest trust boundary from the prior
+   version of this project (LLM ↔ backend tool execution) doesn't exist
+   here.
 
-## LLM provider notes (Use Case 2)
+## Status rollup — documented interpretation
 
-| Provider | Document input | Notes |
-|---|---|---|
-| Anthropic | native PDF/image `document`/`image` content blocks | matches the pattern used by both reference repos reviewed during planning |
-| OpenAI | `input_file`/`input_image` via the Responses API | PDF support requires base64 `file_data` or a prior file upload |
-| Gemini | inline `{"mime_type", "data"}` parts | native PDF support via `google-generativeai` |
-| OpenRouter | OpenAI-compatible chat completions | PDF/vision support **varies by routed model** — check openrouter.ai/models; for scanned documents prefer pre-rasterized page images over raw PDF bytes |
-| Sarvam | chat-completion-style endpoint, base64 payload | **unverified** — re-check Sarvam's current API docs for real multimodal/document support before production use; if it turns out text-only, route documents through an OCR step first (see `invoice-ocr-automation` reference reviewed during planning, which runs Tesseract/pdfplumber locally) and send extracted text instead of raw bytes |
+The spec's delivery-status enum (§8) has no single value for "every
+requested channel ultimately failed" on a multi-channel delivery — only
+`EMAIL_FAILED`/`WHATSAPP_FAILED` (single-channel) and
+`PARTIALLY_DELIVERED` (explicitly: email succeeds, WhatsApp fails).
+`app/workflows/delivery_workflow.py:recompute_delivery_status()` resolves
+this by using `EMAIL_FAILED`/`WHATSAPP_FAILED` only when that is the sole
+requested channel, and falling back to `PARTIALLY_DELIVERED` as the
+closest named state when a multi-channel delivery fails on every channel.
+The exact per-channel outcome is always visible on each `DeliveryAttempt`
+row regardless of what the rollup status says — nothing is hidden by this
+choice, it only affects the single summary field.
 
-## Failure / retry behavior
+## Reused from the earlier version of this project
 
-- Every webhook delivery is idempotency-keyed (`order_id + invoice_version`
-  pattern, §1 of the spec). A retried stage reuses the same correlation ID
-  and idempotency key; it never re-generates an invoice number or PDF, and
-  never re-sends an email if `email_message_id` already exists (Phase 2+).
-- ERP/email/Operations failures do not roll back prior successful steps —
-  they move the invoice to a named failure state (`ERP_SYNC_FAILED`,
-  `CUSTOMER_EMAIL_FAILED`, etc.) for a safe, idempotent retry.
-- A tax-calculation mismatch beyond `TAX_MISMATCH_TOLERANCE` routes to
-  `MANUAL_REVIEW_REQUIRED` rather than either silently accepting the
-  mismatch or hard-failing the order.
-- Use Case 2's decision order is always **REJECT checks → HOLD checks →
-  ACCEPT** (§20) — nothing is accepted by elimination; ACCEPT is only
-  reached when every required check actively passed.
+Per the approved migration plan, these modules were kept in place,
+unchanged or lightly adapted, because they were already generic
+infrastructure rather than AR/GST-specific:
 
-## Reference material consulted while designing this
-
-Two existing repos were reviewed (uploaded during planning, not vendored
-into this repo) for working patterns, not copied verbatim:
-
-- A local OCR/extraction/confidence-scoring/dedup pipeline (Tesseract +
-  pdfplumber/PyMuPDF, no LLM) — informs the fallback/offline extraction path
-  and its `exact_file` vs. `probable_invoice` duplicate-type vocabulary,
-  reused here as `duplicate_type` on `ReceivedDocument` (Phase 4).
-- A Claude-native-PDF extraction + rules-validation + HITL-review pipeline
-  — informs `llm_client.py`'s per-provider document content-block pattern
-  and the severity-typed validation-issue shape used by the (Phase 4)
-  decision engine.
-
-Both were local-folder/CLI tools with no persistent cross-run duplicate
-store, no DB, and no ERP/email/CRM integration — this system's actual
-duplicate detection, persistence, and integrations are new, built per the
-full spec in this repo's planning conversation.
+- `app/core/logging.py` (redaction mechanism — key list and PII regexes
+  updated for email/phone instead of email/GSTIN)
+- `app/core/security.py` (HMAC + timestamp + replay-protection helper —
+  not currently wired to a route in this version, kept for the next
+  webhook that needs HMAC verification)
+- `app/services/audit/service.py`, `app/models/audit_event.py`
+- `app/services/idempotency.py`, `app/models/idempotency.py` (extended
+  with a `delivery_id` column)
+- `app/services/storage/` (interface + local adapter)
+- `app/services/email/` (interface kept, content rewritten — now attaches
+  an existing PDF instead of assuming one is generated internally)
+- `app/tasks/celery_app.py`
+- `Procfile`, the no-Docker deployment posture, `docs/local-setup.md`

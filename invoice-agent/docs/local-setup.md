@@ -1,9 +1,10 @@
 # Local setup (no Docker)
 
-This replaces what would otherwise be a `docker-compose.yml`. Phase 1 needs
-nothing beyond Python + SQLite (see `README.md` quick start). Postgres and
-Redis are only needed from Phase 2 onward, once the webhook/workflow/queue
-code exists.
+This replaces what would otherwise be a `docker-compose.yml`. The test
+suite and local dev server need nothing beyond Python + SQLite (see
+`README.md` quick start). Postgres and Redis matter once you want a real
+background worker sending real emails/WhatsApp messages instead of the
+test harness's synchronous stand-in.
 
 ## PostgreSQL (native install, pick your OS)
 
@@ -44,6 +45,6 @@ default local install.
 
 Point `DATABASE_URL`/`REDIS_URL` at any managed instance you already have
 (a cloud free tier, a shared dev database, etc.) — nothing in this codebase
-assumes localhost. Phase 1's test suite and `alembic upgrade head` both
-work against plain SQLite with zero external services, which is enough to
-validate the scaffold before any real infrastructure exists.
+assumes localhost. The test suite and `alembic upgrade head` both work
+against plain SQLite with zero external services, which is enough to
+validate the whole system before any real infrastructure exists.

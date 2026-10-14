@@ -10,19 +10,16 @@ for.
 Set directly in the hosting platform's secret manager (not committed
 anywhere, not in `.env` in any repo):
 
-- `APP_SECRET_KEY`
-- `CRM_WEBHOOK_HMAC_SECRET`
-- `CRM_API_KEY`, `ERP_API_KEY`, `PRODUCT_ACCESS_API_KEY`
-- `EMAIL_API_KEY`
+- `JWT_SECRET`
+- `EMAIL_API_KEY`, `EMAIL_WEBHOOK_SIGNING_SECRET`
+- `WHATSAPP_AUTH_TOKEN`, `WHATSAPP_WEBHOOK_SIGNING_SECRET`
 - `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY`
-- Whichever `*_API_KEY` matches `LLM_PROVIDER`
-- `SENTRY_DSN`
 
 `app/core/logging.py` redacts any log field whose key contains `api_key`,
-`secret`, `password`, `authorization`, `gstin`, `email`, `phone`, or
-`token`, plus GSTIN-shaped and email-shaped substrings inside free text —
-but that is a safety net, not a substitute for never passing secrets as log
-arguments in the first place.
+`secret`, `password`, `authorization`, `email`, `phone`, `token`, or
+`jwt_secret`, plus email-shaped and E.164-phone-shaped substrings inside
+free text — a safety net, not a substitute for never passing secrets as
+log arguments in the first place.
 
 ## Database migrations
 
@@ -31,38 +28,41 @@ python -m alembic upgrade head
 ```
 
 Run this on deploy, before the new app version starts serving traffic.
-`0001_initial_schema` creates all nine Phase-1 tables. Future migrations
-are additive — see `alembic/versions/`. Never hand-edit a column in
-production outside a migration.
+`0003_invoice_delivery_agent` is the current schema (it also drops the
+prior version's AR/GST tables — see `archive/deprecated/ARCHIVE_NOTES.md`).
+Future migrations are additive — see `alembic/versions/`. Never hand-edit
+a column in production outside a migration.
 
 ## Queues
 
-Celery (`app/tasks/celery_app.py`) against Redis. Two long-running
-processes besides the web process: `worker` and `beat` (see `Procfile`).
-`task_acks_late=True` + `worker_prefetch_multiplier=1` are set so a worker
-crash mid-task re-delivers the task rather than silently dropping it —
-combined with the idempotency-key design, a redelivered task is safe to
-re-run.
+Celery (`app/tasks/celery_app.py`) against Redis. One worker process
+besides the web process (see `Procfile`); `app/tasks/delivery_tasks.py`
+dispatches email/WhatsApp attempts and retries transient failures on the
+fixed schedule in `docs/delivery-rules.md`. `task_acks_late=True` +
+`worker_prefetch_multiplier=1` mean a worker crash mid-task re-delivers
+the task rather than silently dropping it — combined with the
+idempotency-key design, a redelivered task is safe to re-run.
 
 ## Storage
 
-`STORAGE_PROVIDER=local` (default) writes to `STORAGE_LOCAL_DIR` — fine for
-development, **not for production** (not durable, not shared across
-instances). For production, set `STORAGE_PROVIDER=s3` (or `r2`/
-`azure_blob`) with real credentials; invoice PDFs and received documents
-are stored privately with short-lived signed URLs only, never public
-objects.
+`STORAGE_PROVIDER=local` (default) writes to `STORAGE_LOCAL_DIR` — fine
+for development, **not for production** (not durable, not shared across
+instances). For production, implement a real S3-compatible adapter
+against `app/services/storage/base.py` and register it in
+`app/services/storage/factory.py`; invoice PDFs are stored privately with
+short-lived signed URLs only, never public objects.
 
 ## Monitoring
 
-- `SENTRY_DSN` wires error tracking once set (Phase 2+, when there's
-  workflow code to instrument).
-- Structured JSON logs (`structlog`) on stdout — ship them to whatever log
-  aggregator the host already uses.
-- `GET /health` is the liveness/readiness probe. It also doubles as a
-  config-completeness probe via `live_invoicing_ready` — a production
-  deploy with `live_invoicing_ready: false` has shipped without its
-  required company/tax configuration and should alert, not just log.
+- Structured JSON logs (`structlog`) on stdout — ship them to whatever
+  log aggregator the host already uses.
+- `GET /health` is the liveness/readiness probe; it reports which
+  provider each category (`email_provider`, `whatsapp_provider`,
+  `storage_provider`) currently resolves to, so a deploy that's still on
+  `mock` in production is visible at a glance.
+- No error-tracking provider is wired in this version (the prior
+  version's Sentry integration was never built past documentation —
+  nothing to carry over). Add one against `app/main.py` when needed.
 
 ## Backup
 
@@ -73,10 +73,10 @@ something bypassed the audit service, not as expected behavior.
 
 ## Security checklist
 
-- [ ] HMAC webhook secret is a real random secret, rotated from the `.env.example` placeholder.
-- [ ] All `*_PROVIDER` env vars are set to their real provider, not left on `mock`, before go-live.
-- [ ] Admin dashboard has role-based access (`ADMIN`, `FINANCE_REVIEWER`, `OPERATIONS_USER`, `SUPPORT_READ_ONLY`) wired (Phase 3/5).
-- [ ] Rate limiting on the public webhook endpoint (Phase 5).
-- [ ] No secret, GSTIN, full address, or document byte content ever appears in a log line, error response, or frontend URL.
-- [ ] Object storage buckets are private; invoice/document URLs are short-lived signed URLs only.
-- [ ] GST tax-calculation rules and invoice-numbering convention reviewed by a qualified tax professional before production use.
+- [ ] `JWT_SECRET` is a real random secret, rotated from the `.env.example` placeholder.
+- [ ] `EMAIL_PROVIDER` and `WHATSAPP_PROVIDER` are set to real providers, not left on `mock`, before go-live.
+- [ ] At least one real `InternalUser` with role `ADMIN` exists before relying on RBAC in production.
+- [ ] Rate limiting on the public `/d/{token}` download route and the provider webhook routes.
+- [ ] No secret, recipient email/phone, or document byte content ever appears in a log line, error response, or frontend URL.
+- [ ] Object storage buckets are private; invoice document URLs are short-lived signed URLs only, never permanent public links.
+- [ ] The WhatsApp utility/template message is approved by the provider (Twilio/Meta) before `WHATSAPP_PROVIDER=twilio` is used in production.

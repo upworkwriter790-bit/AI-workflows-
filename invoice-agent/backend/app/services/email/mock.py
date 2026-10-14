@@ -3,42 +3,52 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.services.email.base import EmailAdapter
+from app.services.email.base import EmailProvider, EmailProviderEvent, EmailSendPayload
+from app.services.provider_errors import PermanentProviderError, TransientProviderError
 
 
-class MockEmailAdapter(EmailAdapter):
+class MockEmailProvider(EmailProvider):
+    name = "mock"
+
     def __init__(self) -> None:
-        self.sent_messages: dict[str, dict[str, Any]] = {}
+        self.sent: dict[str, EmailSendPayload] = {}
+        # Test-only hook: set to "transient" or "permanent" to simulate a
+        # provider failure on the next send_invoice_email call.
+        self.fail_mode: str | None = None
 
-    def send_invoice_email(
-        self,
-        *,
-        to_email: str,
-        subject: str,
-        body_html: str,
-        pdf_attachment_bytes: bytes | None = None,
-        secure_download_url: str | None = None,
-    ) -> str:
+    def send_invoice_email(self, payload: EmailSendPayload) -> str:
+        if self.fail_mode == "transient":
+            raise TransientProviderError("simulated timeout", error_code="timeout")
+        if self.fail_mode == "permanent":
+            raise PermanentProviderError("simulated invalid recipient", error_code="invalid_recipient")
+
         message_id = f"MOCK-EMAIL-{uuid.uuid4().hex[:12]}"
-        self.sent_messages[message_id] = {
-            "to_email": to_email,
-            "subject": subject,
-            "has_attachment": pdf_attachment_bytes is not None,
-            "secure_download_url": secure_download_url,
-            "status": "sent",
-        }
+        self.sent[message_id] = payload
         return message_id
 
-    def receive_delivery_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
-        message_id = payload.get("message_id", "")
-        status = payload.get("status", "delivered")
-        if message_id in self.sent_messages:
-            self.sent_messages[message_id]["status"] = status
-        return {"message_id": message_id, "status": status}
+    def verify_webhook(self, *, headers: dict[str, str], raw_body: bytes) -> bool:
+        return True
 
-    def resend_invoice_email_with_authorization(
-        self, *, original_message_id: str, authorized_by: str, **send_kwargs: Any
-    ) -> str:
-        if original_message_id not in self.sent_messages:
-            raise LookupError(f"mock email adapter has no message {original_message_id}")
-        return self.send_invoice_email(**send_kwargs)
+    def handle_delivery_event(self, event: dict[str, Any]) -> EmailProviderEvent:
+        return EmailProviderEvent(
+            message_id=event["message_id"],
+            event_type="delivered",
+            occurred_at=event.get("occurred_at"),
+            detail_safe={},
+        )
+
+    def handle_bounce_event(self, event: dict[str, Any]) -> EmailProviderEvent:
+        return EmailProviderEvent(
+            message_id=event["message_id"],
+            event_type="bounced",
+            occurred_at=event.get("occurred_at"),
+            detail_safe={"bounce_type": event.get("bounce_type", "unknown")},
+        )
+
+    def handle_complaint_event(self, event: dict[str, Any]) -> EmailProviderEvent:
+        return EmailProviderEvent(
+            message_id=event["message_id"],
+            event_type="complaint",
+            occurred_at=event.get("occurred_at"),
+            detail_safe={},
+        )

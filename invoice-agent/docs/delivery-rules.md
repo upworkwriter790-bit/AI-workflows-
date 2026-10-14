@@ -1,0 +1,99 @@
+# Delivery rules — Invoice Delivery Agent
+
+(Replaces the old `decision-rules.md`, which described the GST accept/
+hold/reject system that no longer exists in this project — archived at
+`archive/deprecated/docs/decision-rules.md`.)
+
+## State machine (spec §8)
+
+```
+RECEIVED -> FILE_VALIDATED -> FILE_STORED -> DELIVERY_CREATED -> QUEUED
+  -> EMAIL_QUEUED and/or WHATSAPP_QUEUED
+  -> EMAIL_SENT / WHATSAPP_SENT
+  -> EMAIL_DELIVERED / WHATSAPP_DELIVERED (when the provider's webhook supports it)
+  -> COMPLETED
+```
+
+Failure/review states: `INVALID_REQUEST`, `FILE_REJECTED`, `EMAIL_FAILED`,
+`WHATSAPP_FAILED`, `PARTIALLY_DELIVERED`, `RETRY_SCHEDULED`, `CANCELLED`,
+`EXPIRED`.
+
+Implementation note: `RECEIVED` → `FILE_STORED` happen inline inside the
+intake endpoint before any DB row exists for the delivery itself (the
+file must be valid and stored before anything else can happen — rule 1).
+`DELIVERY_CREATED` → `QUEUED` and everything after is tracked on
+`InvoiceDelivery.status`, recomputed by
+`app/workflows/delivery_workflow.py:recompute_delivery_status()` from
+the latest `DeliveryAttempt` per channel.
+
+## Status rollup rules (spec §8 rules 1-9)
+
+1. File storage completes before any channel send — enforced by
+   ordering in `create_invoice_delivery()`.
+2. Each requested channel gets its own `DeliveryAttempt` row.
+3. Email and WhatsApp dispatch independently (two separate Celery tasks);
+   neither blocks the other.
+4. `COMPLETED` only when every requested channel's latest attempt is in a
+   success state (`SENT`/`DELIVERED`/`READ`).
+5. Email succeeds + WhatsApp fails (or vice versa) → `PARTIALLY_DELIVERED`.
+6. An automatic retry reuses the same `DeliveryAttempt` row, incrementing
+   `attempt_number` — it never creates a new document or delivery.
+7. A retry carries the same `correlation_id` (it's a property of the
+   `InvoiceDelivery`, not the attempt).
+8. A manual resend (`POST .../resend`) always creates a **new**
+   `DeliveryAttempt` with `is_resend=True` and a `resend_reason` — never
+   a new `InvoiceDocument` or `InvoiceDelivery`.
+9. No automatic resend after provider acceptance unless the attempt
+   failed before acceptance — the retry path only ever fires from
+   `TransientProviderError` raised inside `send_invoice_email`/
+   `send_invoice_notification` itself, never after a successful send.
+
+### Documented interpretation: no enum value for "all channels failed" (multi-channel)
+
+The spec's status enum has no single value for a multi-channel delivery
+where *every* channel ultimately fails — only `EMAIL_FAILED`/
+`WHATSAPP_FAILED` (used here for a single-channel delivery) and
+`PARTIALLY_DELIVERED` (explicitly defined only for a mixed outcome).
+`recompute_delivery_status()` falls back to `PARTIALLY_DELIVERED` for the
+multi-channel-all-failed case, since it's the closest named failure state
+with per-channel detail — flagged here as a judgment call, not hidden.
+
+## Retry and idempotency policy (spec §12)
+
+| Rule | Implementation |
+|---|---|
+| Transient error retry schedule | 1 min, 5 min, 30 min, 2 hr (`RETRY_SCHEDULE_MINUTES`) |
+| Maximum automated retries | 4 (`RETRY_MAX_ATTEMPTS`) |
+| Retryable | `TransientProviderError` — network errors, timeouts, HTTP 429, provider 5xx |
+| Not retryable | `PermanentProviderError` — invalid recipient data, explicit provider rejection, bounce, template config error, unauthorized credentials |
+| No duplicate send after a timeout | Each attempt's `idempotency_key` passed to the provider is `{delivery_id}:{channel}:{attempt_number}` — a provider with its own idempotency support can de-dupe on this |
+| No duplicate delivery record from API retries | `idempotency_key` on `InvoiceDelivery`, enforced via `IdempotencyRecord`'s unique constraint |
+| Retry visibility | Every `RETRY_SCHEDULED`, `EMAIL_FAILED`/`WHATSAPP_FAILED`, and provider webhook event writes an `AuditEvent` |
+
+## WhatsApp-specific rules (spec §10)
+
+- Notification only — no PDF attachment, ever, in v1.
+- Sent via a provider-approved utility/template message
+  (`WHATSAPP_TEMPLATE_ID`), never free-form text.
+- If `WHATSAPP_PROVIDER` is unconfigured or misconfigured when a
+  WhatsApp attempt is dispatched, that channel's attempt is marked
+  `FAILED` with `error_code="configuration_failed"` and the email
+  channel (if also requested) is dispatched independently and is
+  unaffected.
+- The template variables are recipient name, invoice number/reference
+  (if available), and the secure download link (if enabled) — never a
+  financial amount, GSTIN, or full address.
+
+## Secure download links (spec §11)
+
+- Token: `secrets.token_urlsafe(32)`, returned once at creation.
+- Persisted: only `sha256(token)`.
+- Default expiry: 7 days. Default max downloads: 3. Both configurable.
+- Access checks, in order: token exists → not revoked → not expired →
+  download count below max. Any failure is a 404 at the HTTP layer
+  (never distinguishing *why* to an unauthenticated caller) but is logged
+  internally with the real reason.
+- Revoke + reissue is one authorized action
+  (`POST .../secure-link/reissue`) — it revokes every currently-active
+  link for that delivery before creating the replacement, so there is
+  never more than one active link per delivery at a time.

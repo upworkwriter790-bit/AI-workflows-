@@ -23,7 +23,7 @@ class AuditEvent(Base):
     event_name: Mapped[str] = mapped_column(String(128))
     previous_state: Mapped[str | None] = mapped_column(String(64))
     new_state: Mapped[str | None] = mapped_column(String(64))
-    actor_type: Mapped[str] = mapped_column(String(16))  # SYSTEM|USER|CRM|ERP|LLM
+    actor_type: Mapped[str] = mapped_column(String(24))  # SYSTEM|USER|API|EMAIL_PROVIDER|WHATSAPP_PROVIDER
     actor_id: Mapped[str | None] = mapped_column(String(128))
     safe_payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

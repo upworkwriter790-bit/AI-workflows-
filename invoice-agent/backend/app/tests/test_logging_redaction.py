@@ -10,11 +10,11 @@ def test_redacts_known_sensitive_keys():
     assert result["note"] == "fine"
 
 
-def test_redacts_gstin_pattern_in_free_text():
-    event = {"message": "invoice from 27AAAPL1234C1Z5 received"}
+def test_redacts_phone_pattern_in_free_text():
+    event = {"message": "notified +919876543210 via whatsapp"}
     result = _redact_processor(None, "info", event)
-    assert "27AAAPL1234C1Z5" not in result["message"]
-    assert "[REDACTED_GSTIN]" in result["message"]
+    assert "+919876543210" not in result["message"]
+    assert "[REDACTED_PHONE]" in result["message"]
 
 
 def test_redacts_email_pattern_in_free_text():
