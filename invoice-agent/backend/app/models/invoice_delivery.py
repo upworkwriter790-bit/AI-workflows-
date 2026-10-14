@@ -3,7 +3,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -25,6 +33,13 @@ class InvoiceDelivery(Base):
 
     external_reference: Mapped[str | None] = mapped_column(String(128))
     invoice_number: Mapped[str | None] = mapped_column(String(64))
+
+    # Preserved from the original intake request so the approval step
+    # (which happens in a separate HTTP call, possibly much later) honors
+    # the sender's original intent rather than guessing or hardcoding.
+    attach_pdf_to_email: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_download_link: Mapped[bool] = mapped_column(Boolean, default=True)
+    send_whatsapp_notification: Mapped[bool] = mapped_column(Boolean, default=True)
 
     status: Mapped[str] = mapped_column(String(32), default="RECEIVED")
     idempotency_key: Mapped[str] = mapped_column(String(255), index=True)

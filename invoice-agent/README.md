@@ -131,13 +131,13 @@ curl -X POST http://localhost:8000/api/v1/invoice-deliveries \
   -F "invoice_number=INV-2026-0045"
 ```
 
-Response:
+Response — the delivery is created as a `DRAFT`; nothing is sent yet:
 
 ```json
 {
   "delivery_id": "b1a2...",
   "correlation_id": "corr_...",
-  "status": "QUEUED",
+  "status": "DRAFT",
   "requested_channels": ["email", "whatsapp"],
   "created_at": "2026-10-14T10:00:00Z"
 }
@@ -145,6 +145,17 @@ Response:
 
 A repeated call with the same `idempotency_key` returns the same
 `delivery_id` and does not create a second delivery.
+
+Nothing is emailed or WhatsApped until a human explicitly approves it:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/invoice-deliveries/b1a2.../approve \
+  -H "Authorization: Bearer <jwt-for-an-ADMIN-or-DELIVERY_MANAGER-user>"
+```
+
+That call creates the delivery attempts and enqueues the actual send —
+the response's `status` becomes `QUEUED` and then progresses to
+`COMPLETED`/`PARTIALLY_DELIVERED`/etc. as providers report back.
 
 ## Generated-invoice API example (Method B)
 
@@ -171,20 +182,42 @@ curl -X POST http://localhost:8000/api/v1/generated-invoice-deliveries \
   }'
 ```
 
-Response:
+Response — this is held as a reviewable `DRAFT`. GST figures are
+calculated and visible, but no invoice number is reserved, no PDF
+exists, and `delivery_id`/`document_id`/`invoice_number` are `null`:
 
 ```json
 {
-  "delivery_id": "invdel_123",
-  "document_id": "doc_123",
+  "delivery_id": null,
+  "document_id": null,
   "invoice_id": "invoice_123",
-  "invoice_number": "INV/FY26-27/000001",
+  "invoice_number": null,
   "correlation_id": "corr_123",
-  "status": "DELIVERY_QUEUED",
+  "status": "DRAFT",
   "requested_channels": ["email", "whatsapp"],
+  "grand_total": 1180.00,
   "created_at": "2026-10-14T10:00:00Z"
 }
 ```
+
+Review it with `GET /api/v1/generated-invoice-deliveries/invoice_123`,
+edit it with `PATCH` (same request body, full replace + recalculation)
+while it's still `DRAFT`, or discard it with
+`POST /api/v1/generated-invoice-deliveries/invoice_123/discard` (no
+invoice number was ever reserved, so discarding leaves no gap in the
+sequence).
+
+When it's ready, one call both finalizes and authorizes sending:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/generated-invoice-deliveries/invoice_123/approve \
+  -H "Authorization: Bearer <jwt-for-an-ADMIN-or-DELIVERY_MANAGER-user>"
+```
+
+This reserves the real invoice number, renders and stores the PDF, and
+queues the delivery — the response now carries a real `delivery_id`,
+`document_id`, and `invoice_number`, with `status: "DELIVERY_QUEUED"`.
+The invoice is immutable from this point on.
 
 The same `idempotency_key` always returns the same invoice/delivery —
 never a second invoice number, PDF, or send. Submitting a **different**

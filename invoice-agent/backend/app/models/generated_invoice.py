@@ -3,19 +3,30 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
 
 class GeneratedInvoice(Base):
-    """A Method-B invoice this system generated itself. Immutable once
-    `generated_at` is set (spec §6: "once a generated invoice PDF is
-    stored, invoice number, calculation snapshot, invoice data, and
-    rendered PDF must be immutable") — application code must never
-    update these columns after that point, only create a separate
-    credit-note/replacement record in a future design.
+    """A Method-B invoice. Sits as an editable `DRAFT` (no invoice number,
+    no PDF, no InvoiceDocument/InvoiceDelivery yet) until an authorized
+    user calls the approve endpoint. Immutable once `generated_at` is set
+    (spec §6) — application code must never update invoice_number,
+    calculation_snapshot_json, the financial columns, or pdf_sha256 after
+    that point, only create a separate credit-note/replacement record in
+    a future design.
     """
 
     __tablename__ = "generated_invoices"
@@ -68,10 +79,21 @@ class GeneratedInvoice(Base):
     calculation_snapshot_json: Mapped[dict] = mapped_column(JSON, default=dict)
     pdf_sha256: Mapped[str | None] = mapped_column(String(64))
 
+    # Delivery intent, preserved from intake so the approve step (a
+    # separate call, after a human has reviewed/edited the draft) can
+    # act on it without the caller resubmitting anything.
+    requested_channels_json: Mapped[list] = mapped_column(JSON, default=list)
+    attach_pdf_to_email: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_download_link: Mapped[bool] = mapped_column(Boolean, default=True)
+    send_whatsapp_notification: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
     status: Mapped[str] = mapped_column(String(48), default="REQUEST_RECEIVED")
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     correlation_id: Mapped[str] = mapped_column(String(64), index=True)
     created_by_user_id: Mapped[str | None] = mapped_column(String(36))
+    approved_by_user_id: Mapped[str | None] = mapped_column(String(36))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

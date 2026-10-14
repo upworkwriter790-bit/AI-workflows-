@@ -21,9 +21,19 @@ def _upload(client, headers, **overrides):
     return client.post("/api/v1/invoice-deliveries", data=data, files=files, headers=headers)
 
 
+def _upload_and_approve(client, headers, **overrides):
+    resp = _upload(client, headers, **overrides)
+    assert resp.status_code == 201
+    delivery_id = resp.json()["delivery_id"]
+    approve_resp = client.post(f"/api/v1/invoice-deliveries/{delivery_id}/approve", headers=headers)
+    assert approve_resp.status_code == 200
+    return approve_resp
+
+
 def test_email_delivery_creates_attempt_with_pdf_attachment(harness):
-    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-c1", requested_channels=["email"])
-    assert resp.status_code == 202
+    resp = _upload_and_approve(
+        harness.client, harness.admin_headers, idempotency_key="idem-c1", requested_channels=["email"]
+    )
     delivery_id = resp.json()["delivery_id"]
 
     db = harness.SessionLocal()
@@ -37,10 +47,9 @@ def test_email_delivery_creates_attempt_with_pdf_attachment(harness):
 
 
 def test_whatsapp_delivery_creates_notification_attempt(harness):
-    resp = _upload(
+    resp = _upload_and_approve(
         harness.client, harness.admin_headers, idempotency_key="idem-c2", requested_channels=["whatsapp"]
     )
-    assert resp.status_code == 202
     delivery_id = resp.json()["delivery_id"]
 
     db = harness.SessionLocal()
@@ -54,7 +63,9 @@ def test_whatsapp_delivery_creates_notification_attempt(harness):
 
 
 def test_email_provider_delivered_webhook_updates_status(harness):
-    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-c3", requested_channels=["email"])
+    resp = _upload_and_approve(
+        harness.client, harness.admin_headers, idempotency_key="idem-c3", requested_channels=["email"]
+    )
     delivery_id = resp.json()["delivery_id"]
 
     db = harness.SessionLocal()
@@ -81,7 +92,7 @@ def test_email_provider_delivered_webhook_updates_status(harness):
 
 
 def test_whatsapp_provider_delivered_then_read_callback_updates_status(harness):
-    resp = _upload(
+    resp = _upload_and_approve(
         harness.client, harness.admin_headers, idempotency_key="idem-c4", requested_channels=["whatsapp"]
     )
     delivery_id = resp.json()["delivery_id"]
@@ -117,7 +128,9 @@ def test_transient_email_failure_schedules_retry_then_eventually_fails(harness, 
     failing_provider.fail_mode = "transient"
     monkeypatch.setattr(delivery_workflow, "get_email_provider", lambda settings: failing_provider)
 
-    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-c5", requested_channels=["email"])
+    resp = _upload_and_approve(
+        harness.client, harness.admin_headers, idempotency_key="idem-c5", requested_channels=["email"]
+    )
     delivery_id = resp.json()["delivery_id"]
 
     db = harness.SessionLocal()
@@ -140,7 +153,9 @@ def test_permanent_email_failure_does_not_retry(harness, monkeypatch):
     failing_provider.fail_mode = "permanent"
     monkeypatch.setattr(delivery_workflow, "get_email_provider", lambda settings: failing_provider)
 
-    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-c6", requested_channels=["email"])
+    resp = _upload_and_approve(
+        harness.client, harness.admin_headers, idempotency_key="idem-c6", requested_channels=["email"]
+    )
     delivery_id = resp.json()["delivery_id"]
 
     db = harness.SessionLocal()
@@ -160,8 +175,7 @@ def test_whatsapp_failure_does_not_prevent_successful_email(harness, monkeypatch
     failing_whatsapp.fail_mode = "permanent"
     monkeypatch.setattr(delivery_workflow, "get_whatsapp_provider", lambda settings: failing_whatsapp)
 
-    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-c7")
-    assert resp.status_code == 202
+    resp = _upload_and_approve(harness.client, harness.admin_headers, idempotency_key="idem-c7")
     delivery_id = resp.json()["delivery_id"]
 
     db = harness.SessionLocal()
@@ -185,7 +199,7 @@ def test_partial_delivery_is_correctly_shown_in_detail_view(harness, monkeypatch
     failing_whatsapp.fail_mode = "permanent"
     monkeypatch.setattr(delivery_workflow, "get_whatsapp_provider", lambda settings: failing_whatsapp)
 
-    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-c8")
+    resp = _upload_and_approve(harness.client, harness.admin_headers, idempotency_key="idem-c8")
     delivery_id = resp.json()["delivery_id"]
 
     detail = harness.client.get(f"/api/v1/invoice-deliveries/{delivery_id}", headers=harness.viewer_headers)

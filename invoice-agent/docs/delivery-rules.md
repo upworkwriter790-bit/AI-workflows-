@@ -4,6 +4,46 @@
 hold/reject system that no longer exists in this project — archived at
 `archive/deprecated/docs/decision-rules.md`.)
 
+## Draft/approval gate (added on top of the spec, both methods)
+
+Neither method dispatches anything automatically. This is a deliberate
+addition beyond the original spec: a human must explicitly approve a
+delivery before any email or WhatsApp message goes out.
+
+- **Method A** (`InvoiceDelivery`): the intake call creates the delivery
+  as `DRAFT` — no `DeliveryAttempt` row exists yet. Nothing is editable
+  here; the only decision is send/don't-send.
+  `POST /{delivery_id}/approve` is a simple yes: it creates one
+  `DeliveryAttempt` per originally-requested channel and enqueues
+  dispatch. Calling it twice is a 409 (not a re-send — use `/resend` for
+  that).
+- **Method B** (`GeneratedInvoice`): the intake call validates and
+  calculates GST figures and stops at `DRAFT` — no invoice number is
+  reserved, no PDF exists, nothing is queued. The draft is fully
+  reviewable (`GET /{invoice_id}`) and editable
+  (`PATCH /{invoice_id}`, a full replace that recalculates everything
+  from scratch under the same validation/total-mismatch rules as
+  create) for as long as it stays `DRAFT`. A human either discards it
+  (`POST /{invoice_id}/discard` — no invoice number was ever consumed,
+  so no gap is left in the sequence) or calls
+  `POST /{invoice_id}/approve`, which in one action both finalizes the
+  invoice (reserves the number, renders the PDF, creates the
+  `InvoiceDocument`) and authorizes it to be sent (creates the
+  `InvoiceDelivery` and immediately queues it). After approval the
+  invoice is immutable — same rule as before, just moved to a distinct
+  human-triggered moment instead of the end of the original request.
+
+Implementation: `app/workflows/delivery_workflow.py`
+(`create_delivery`/`approve_delivery`) and
+`app/workflows/generated_invoice_workflow.py`
+(`create_draft_generated_invoice`/`edit_draft_generated_invoice`/
+`approve_and_finalize`). Migration `0005_draft_approval_gate` adds the
+columns this needed (`attach_pdf_to_email`, `include_download_link`,
+`send_whatsapp_notification` on both tables, plus `requested_channels_json`,
+`notes`, `approved_by_user_id`, `approved_at` on `generated_invoices`) so
+the channel-option intent captured at intake survives to the separate,
+possibly much later, approval call without being resubmitted.
+
 ## State machine (spec §8)
 
 ```

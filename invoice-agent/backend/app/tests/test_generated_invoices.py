@@ -50,10 +50,22 @@ def _post(client, headers, payload):
     return client.post("/api/v1/generated-invoice-deliveries", json=payload, headers=headers)
 
 
+def _approve(client, headers, invoice_id):
+    return client.post(f"/api/v1/generated-invoice-deliveries/{invoice_id}/approve", headers=headers)
+
+
+def _post_and_approve(client, headers, payload):
+    draft = _post(client, headers, payload)
+    assert draft.status_code == 201
+    approved = _approve(client, headers, draft.json()["invoice_id"])
+    assert approved.status_code == 200
+    return draft, approved
+
+
 def test_valid_payment_details_generate_exactly_one_pdf(harness):
-    resp = _post(harness.client, harness.admin_headers, _base_payload())
-    assert resp.status_code == 202
-    body = resp.json()
+    draft, approved = _post_and_approve(harness.client, harness.admin_headers, _base_payload())
+    assert draft.json()["status"] == "DRAFT"
+    body = approved.json()
     assert body["invoice_number"].startswith("INV/FY")
     assert body["delivery_id"] is not None
 
@@ -67,13 +79,14 @@ def test_valid_payment_details_generate_exactly_one_pdf(harness):
 
 
 def test_same_idempotency_key_returns_original_invoice_and_delivery(harness):
-    first = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-dup"))
+    _, approved_first = _post_and_approve(
+        harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-dup")
+    )
     second = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-dup"))
 
-    assert first.status_code == 202
-    assert second.status_code in {200, 202}
-    assert first.json()["invoice_number"] == second.json()["invoice_number"]
-    assert first.json()["invoice_id"] == second.json()["invoice_id"]
+    assert second.status_code == 201
+    assert approved_first.json()["invoice_number"] == second.json()["invoice_number"]
+    assert approved_first.json()["invoice_id"] == second.json()["invoice_id"]
 
     db = harness.SessionLocal()
     try:
@@ -85,7 +98,7 @@ def test_same_idempotency_key_returns_original_invoice_and_delivery(harness):
 
 def test_tax_exclusive_intra_state_calculation_is_correct(harness):
     resp = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-intra"))
-    assert resp.status_code == 202
+    assert resp.status_code == 201
 
     db = harness.SessionLocal()
     try:
@@ -103,7 +116,7 @@ def test_tax_exclusive_inter_state_calculation_is_correct(harness):
     payload["recipient"]["billing_address"]["state"] = "Delhi"
     payload["recipient"]["billing_address"]["state_code"] = "07"
     resp = _post(harness.client, harness.admin_headers, payload)
-    assert resp.status_code == 202
+    assert resp.status_code == 201
 
     db = harness.SessionLocal()
     try:
@@ -124,7 +137,7 @@ def test_tax_inclusive_calculation_is_correct(harness):
     payload["items"][0]["unit_price"] = 1180.00
 
     resp = _post(harness.client, harness.admin_headers, payload)
-    assert resp.status_code == 202
+    assert resp.status_code == 201
 
     db = harness.SessionLocal()
     try:
@@ -177,11 +190,11 @@ def test_invoice_numbers_unique_across_requests(harness):
     second_payload["external_reference"] = "ORD-201"
     second_payload["payment_or_order_details"]["payment_reference"] = "PAY-201"
 
-    first = _post(harness.client, harness.admin_headers, first_payload)
-    second = _post(harness.client, harness.admin_headers, second_payload)
+    _, first_approved = _post_and_approve(harness.client, harness.admin_headers, first_payload)
+    _, second_approved = _post_and_approve(harness.client, harness.admin_headers, second_payload)
 
-    seq1 = int(first.json()["invoice_number"].rsplit("/", 1)[-1])
-    seq2 = int(second.json()["invoice_number"].rsplit("/", 1)[-1])
+    seq1 = int(first_approved.json()["invoice_number"].rsplit("/", 1)[-1])
+    seq2 = int(second_approved.json()["invoice_number"].rsplit("/", 1)[-1])
     assert seq2 == seq1 + 1
 
 
@@ -193,16 +206,17 @@ def test_failed_email_does_not_regenerate_pdf_or_invoice_number(harness, monkeyp
     failing.fail_mode = "permanent"
     monkeypatch.setattr(delivery_workflow, "get_email_provider", lambda settings: failing)
 
-    resp = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-email-fail"))
-    assert resp.status_code == 202
-    invoice_number = resp.json()["invoice_number"]
+    _, approved = _post_and_approve(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-email-fail"))
+    invoice_number = approved.json()["invoice_number"]
 
     db = harness.SessionLocal()
     try:
         gi = db.query(GeneratedInvoice).filter_by(idempotency_key="gi-email-fail").one()
         assert gi.invoice_number == invoice_number
         assert db.query(InvoiceDocument).filter_by(invoice_number=invoice_number).count() == 1
-        attempt = db.query(DeliveryAttempt).filter_by(delivery_id=resp.json()["delivery_id"], channel="EMAIL").one()
+        attempt = db.query(DeliveryAttempt).filter_by(
+            delivery_id=approved.json()["delivery_id"], channel="EMAIL"
+        ).one()
         assert attempt.status == "FAILED"
     finally:
         db.close()
@@ -216,16 +230,15 @@ def test_failed_whatsapp_does_not_prevent_email_result_from_being_stored(harness
     failing.fail_mode = "permanent"
     monkeypatch.setattr(delivery_workflow, "get_whatsapp_provider", lambda settings: failing)
 
-    resp = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-wa-fail"))
-    assert resp.status_code == 202
+    _, approved = _post_and_approve(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-wa-fail"))
 
     db = harness.SessionLocal()
     try:
         email_attempt = db.query(DeliveryAttempt).filter_by(
-            delivery_id=resp.json()["delivery_id"], channel="EMAIL"
+            delivery_id=approved.json()["delivery_id"], channel="EMAIL"
         ).one()
         whatsapp_attempt = db.query(DeliveryAttempt).filter_by(
-            delivery_id=resp.json()["delivery_id"], channel="WHATSAPP"
+            delivery_id=approved.json()["delivery_id"], channel="WHATSAPP"
         ).one()
         assert email_attempt.status == "SENT"
         assert whatsapp_attempt.status == "FAILED"
@@ -248,16 +261,20 @@ def test_delivery_pipeline_shared_between_both_methods(harness):
         files={"invoice_file": ("invoice.pdf", pdf_bytes, "application/pdf")},
         headers=harness.admin_headers,
     )
-    method_b = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-shared-b"))
+    assert method_a.status_code == 201
+    harness.client.post(
+        f"/api/v1/invoice-deliveries/{method_a.json()['delivery_id']}/approve", headers=harness.admin_headers
+    )
 
-    assert method_a.status_code == 202
-    assert method_b.status_code == 202
+    _, method_b_approved = _post_and_approve(
+        harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-shared-b")
+    )
 
     detail_a = harness.client.get(
         f"/api/v1/invoice-deliveries/{method_a.json()['delivery_id']}", headers=harness.admin_headers
     )
     detail_b = harness.client.get(
-        f"/api/v1/invoice-deliveries/{method_b.json()['delivery_id']}", headers=harness.admin_headers
+        f"/api/v1/invoice-deliveries/{method_b_approved.json()['delivery_id']}", headers=harness.admin_headers
     )
     assert detail_a.status_code == 200
     assert detail_b.status_code == 200
@@ -265,15 +282,15 @@ def test_delivery_pipeline_shared_between_both_methods(harness):
 
 
 def test_secure_link_works_for_generated_invoice(harness):
-    resp = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-link"))
-    document_id = resp.json()["document_id"]
+    _, approved = _post_and_approve(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-link"))
+    document_id = approved.json()["document_id"]
 
     db = harness.SessionLocal()
     try:
         from app.services.secure_links.service import create_link
 
         link = create_link(
-            db, document_id=document_id, delivery_id=resp.json()["delivery_id"],
+            db, document_id=document_id, delivery_id=approved.json()["delivery_id"],
             expiry_days=7, max_downloads=3,
         )
         token = link.token
@@ -286,8 +303,8 @@ def test_secure_link_works_for_generated_invoice(harness):
 
 
 def test_resend_creates_new_attempt_but_no_new_generated_invoice(harness):
-    resp = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-resend"))
-    delivery_id = resp.json()["delivery_id"]
+    _, approved = _post_and_approve(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-resend"))
+    delivery_id = approved.json()["delivery_id"]
 
     resend = harness.client.post(
         f"/api/v1/invoice-deliveries/{delivery_id}/resend",
@@ -321,9 +338,11 @@ def test_removed_routes_still_unreachable(harness):
 
 
 def test_pdf_output_includes_required_fields(harness):
-    resp = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-pdf-content"))
-    document_id = resp.json()["document_id"]
-    invoice_number = resp.json()["invoice_number"]
+    _, approved = _post_and_approve(
+        harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-pdf-content")
+    )
+    document_id = approved.json()["document_id"]
+    invoice_number = approved.json()["invoice_number"]
 
     db = harness.SessionLocal()
     try:
@@ -360,8 +379,7 @@ def test_amounts_are_decimal_not_float(harness):
 
 
 def test_same_transaction_refs_under_new_idempotency_key_rejected(harness):
-    first = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-refs-1"))
-    assert first.status_code == 202
+    _post_and_approve(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-refs-1"))
 
     second = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-refs-2"))
     assert second.status_code == 422
@@ -396,3 +414,112 @@ def test_catalog_mismatch_rejected(harness):
 
     resp = _post(harness.client, harness.admin_headers, payload)
     assert resp.status_code == 422
+
+
+def test_draft_is_editable_and_recalculates(harness):
+    draft = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-edit"))
+    invoice_id = draft.json()["invoice_id"]
+    assert draft.json()["grand_total"] == 1180.00
+
+    updated_payload = _base_payload(idempotency_key="gi-edit")
+    updated_payload["items"][0]["quantity"] = 2
+    updated_payload["payment_or_order_details"]["subtotal"] = 2000.00
+    updated_payload["payment_or_order_details"]["tax_total"] = 360.00
+    updated_payload["payment_or_order_details"]["grand_total"] = 2360.00
+
+    edit_resp = harness.client.patch(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}", json=updated_payload, headers=harness.admin_headers
+    )
+    assert edit_resp.status_code == 200
+    assert edit_resp.json()["grand_total"] == 2360.00
+
+    detail = harness.client.get(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}", headers=harness.admin_headers
+    )
+    assert detail.json()["is_editable"] is True
+    assert detail.json()["line_items"][0]["quantity"] == 2.0
+
+
+def test_editing_a_non_draft_invoice_is_rejected(harness):
+    draft, _approved = _post_and_approve(
+        harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-edit-locked")
+    )
+    invoice_id = draft.json()["invoice_id"]
+
+    edit_resp = harness.client.patch(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}",
+        json=_base_payload(idempotency_key="gi-edit-locked"),
+        headers=harness.admin_headers,
+    )
+    assert edit_resp.status_code == 409
+
+
+def test_approving_a_non_draft_invoice_is_rejected(harness):
+    draft, _ = _post_and_approve(
+        harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-approve-twice")
+    )
+    invoice_id = draft.json()["invoice_id"]
+
+    second_approve = _approve(harness.client, harness.admin_headers, invoice_id)
+    assert second_approve.status_code == 409
+
+
+def test_discarding_a_draft_leaves_no_invoice_number_reserved(harness):
+    draft = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-discard"))
+    invoice_id = draft.json()["invoice_id"]
+
+    discard_resp = harness.client.post(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}/discard", headers=harness.admin_headers
+    )
+    assert discard_resp.status_code == 200
+    assert discard_resp.json()["status"] == "CANCELLED"
+
+    db = harness.SessionLocal()
+    try:
+        gi = db.query(GeneratedInvoice).filter_by(id=invoice_id).one()
+        assert gi.status == "CANCELLED"
+        assert gi.invoice_number is None
+        assert db.query(InvoiceDocument).count() == 0
+    finally:
+        db.close()
+
+    next_payload = _base_payload(idempotency_key="gi-discard-next")
+    next_payload["external_reference"] = "ORD-300"
+    next_payload["payment_or_order_details"]["payment_reference"] = "PAY-300"
+    _next_draft, next_approved = _post_and_approve(harness.client, harness.admin_headers, next_payload)
+    # No gap was left in the sequence by the discarded draft, which never
+    # reserved a number.
+    assert next_approved.json()["invoice_number"] is not None
+
+
+def test_discarding_a_non_draft_invoice_is_rejected(harness):
+    draft, _ = _post_and_approve(
+        harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-discard-locked")
+    )
+    invoice_id = draft.json()["invoice_id"]
+
+    discard_resp = harness.client.post(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}/discard", headers=harness.admin_headers
+    )
+    assert discard_resp.status_code == 409
+
+
+def test_nothing_is_dispatched_until_approval(harness, monkeypatch):
+    from app.tasks import delivery_tasks
+
+    called = []
+    monkeypatch.setattr(delivery_tasks.send_email_attempt_task, "delay", lambda *a, **k: called.append(a))
+
+    draft = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-no-dispatch"))
+    assert draft.status_code == 201
+    assert draft.json()["delivery_id"] is None
+    assert called == []
+
+
+def test_list_generated_invoices_returns_summary(harness):
+    _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-list-1"))
+    resp = harness.client.get("/api/v1/generated-invoice-deliveries", headers=harness.viewer_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] >= 1
+    assert any(item["invoice_id"] for item in body["generated_invoices"])

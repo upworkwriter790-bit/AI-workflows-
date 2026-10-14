@@ -47,6 +47,7 @@ def test_resend_requires_a_reason(harness):
 def test_resend_creates_new_attempt_not_new_document(harness):
     resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-r3")
     delivery_id = resp.json()["delivery_id"]
+    harness.client.post(f"/api/v1/invoice-deliveries/{delivery_id}/approve", headers=harness.admin_headers)
 
     ok = harness.client.post(
         f"/api/v1/invoice-deliveries/{delivery_id}/resend",
@@ -75,6 +76,7 @@ def test_resend_creates_new_attempt_not_new_document(harness):
 def test_resend_audit_event_records_user_identity_and_reason(harness):
     resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-r4")
     delivery_id = resp.json()["delivery_id"]
+    harness.client.post(f"/api/v1/invoice-deliveries/{delivery_id}/approve", headers=harness.admin_headers)
 
     harness.client.post(
         f"/api/v1/invoice-deliveries/{delivery_id}/resend",

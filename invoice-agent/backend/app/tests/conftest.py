@@ -29,7 +29,27 @@ def db_session() -> Session:
 
 @pytest.fixture()
 def client() -> TestClient:
-    return TestClient(app)
+    """Bare client with Settings forced away from whatever real values a
+    deployer's .env happens to hold — tests must never depend on real
+    provider credentials or seller identity being present or absent.
+    """
+
+    def _get_settings_override():
+        return Settings(
+            EMAIL_PROVIDER="mock",
+            WHATSAPP_PROVIDER="mock",
+            COMPANY_LEGAL_NAME=None,
+            COMPANY_REGISTERED_ADDRESS=None,
+            SELLER_GSTIN=None,
+            SELLER_STATE_NAME=None,
+            SELLER_STATE_CODE=None,
+        )
+
+    app.dependency_overrides[get_settings] = _get_settings_override
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.fixture()
@@ -57,6 +77,8 @@ def harness(tmp_path, monkeypatch):
         APP_BASE_URL="http://test.local",
         JWT_SECRET="test-jwt-secret",
         PDF_RENDERER="weasyprint",
+        EMAIL_PROVIDER="mock",
+        WHATSAPP_PROVIDER="mock",
     )
 
     def _get_db_override():
@@ -91,9 +113,12 @@ def harness(tmp_path, monkeypatch):
     viewer_token = create_access_token(viewer, settings)
     seed_db.close()
 
-    from app.tasks import delivery_tasks
-    from app.workflows.delivery_workflow import dispatch_email_attempt, dispatch_whatsapp_attempt
     from app.models.delivery_attempt import DeliveryAttempt
+    from app.tasks import delivery_tasks
+    from app.workflows.delivery_workflow import (
+        dispatch_email_attempt,
+        dispatch_whatsapp_attempt,
+    )
 
     def _fake_send_email(attempt_id, *, attach_pdf, include_download_link):
         db = TestSessionLocal()

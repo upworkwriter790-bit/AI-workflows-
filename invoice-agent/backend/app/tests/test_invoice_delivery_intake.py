@@ -21,11 +21,15 @@ def _upload(client, headers, **overrides):
     return client.post("/api/v1/invoice-deliveries", data=data, files=files, headers=headers)
 
 
+def _approve(client, headers, delivery_id):
+    return client.post(f"/api/v1/invoice-deliveries/{delivery_id}/approve", headers=headers)
+
+
 def test_valid_pdf_upload_queues_delivery(harness):
     resp = _upload(harness.client, harness.admin_headers)
-    assert resp.status_code == 202
+    assert resp.status_code == 201
     body = resp.json()
-    assert body["status"] in {"QUEUED", "COMPLETED", "PARTIALLY_DELIVERED", "EMAIL_FAILED", "WHATSAPP_FAILED"}
+    assert body["status"] == "DRAFT"
     assert set(body["requested_channels"]) == {"email", "whatsapp"}
     assert "delivery_id" in body and "correlation_id" in body
 
@@ -35,6 +39,29 @@ def test_valid_pdf_upload_queues_delivery(harness):
         assert db.query(InvoiceDocument).count() == 1
     finally:
         db.close()
+
+    approve_resp = _approve(harness.client, harness.admin_headers, body["delivery_id"])
+    assert approve_resp.status_code == 200
+    approved_body = approve_resp.json()
+    assert approved_body["status"] in {"QUEUED", "COMPLETED", "PARTIALLY_DELIVERED", "EMAIL_FAILED", "WHATSAPP_FAILED"}
+
+
+def test_delivery_not_dispatched_until_approved(harness):
+    resp = _upload(harness.client, harness.admin_headers, idempotency_key="idem-draft-gate")
+    delivery_id = resp.json()["delivery_id"]
+
+    db = harness.SessionLocal()
+    try:
+        from app.models.delivery_attempt import DeliveryAttempt
+
+        assert db.query(DeliveryAttempt).filter_by(delivery_id=delivery_id).count() == 0
+    finally:
+        db.close()
+
+    second_approve = _approve(harness.client, harness.admin_headers, delivery_id)
+    assert second_approve.status_code == 200
+    repeat_approve = _approve(harness.client, harness.admin_headers, delivery_id)
+    assert repeat_approve.status_code == 409
 
 
 def test_non_pdf_upload_rejected(harness):
@@ -77,8 +104,8 @@ def test_same_idempotency_key_does_not_create_duplicate_delivery(harness):
     first = _upload(harness.client, harness.admin_headers, idempotency_key="idem-dup")
     second = _upload(harness.client, harness.admin_headers, idempotency_key="idem-dup")
 
-    assert first.status_code == 202
-    assert second.status_code in {200, 202}
+    assert first.status_code == 201
+    assert second.status_code in {200, 201}
     assert first.json()["delivery_id"] == second.json()["delivery_id"]
 
     db = harness.SessionLocal()

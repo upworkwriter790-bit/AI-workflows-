@@ -27,9 +27,19 @@ from app.services.file_validation import (
     validate_e164_phone,
     validate_pdf_upload,
 )
-from app.services.idempotency import ReservationStatus, hash_request_body, mark_completed, reserve
+from app.services.idempotency import (
+    ReservationStatus,
+    hash_request_body,
+    mark_completed,
+    reserve,
+)
 from app.services.storage.factory import get_storage_adapter
-from app.workflows.delivery_workflow import create_delivery, create_resend_attempt
+from app.workflows.delivery_workflow import (
+    DeliveryNotDraftError,
+    approve_delivery,
+    create_delivery,
+    create_resend_attempt,
+)
 
 router = APIRouter(prefix="/api/v1/invoice-deliveries", tags=["invoice-deliveries"])
 
@@ -60,7 +70,7 @@ def _delivery_response(delivery: InvoiceDelivery) -> dict:
     }
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=201)
 async def create_invoice_delivery(
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -165,15 +175,45 @@ async def create_invoice_delivery(
 
     mark_completed(db, reservation.record, response_reference=delivery.id, delivery_id=delivery.id)
 
-    from app.tasks.delivery_tasks import send_email_attempt_task, send_whatsapp_attempt_task
+    # Deliberately does NOT enqueue email/WhatsApp dispatch here — the
+    # delivery sits as a DRAFT until an authorized user calls
+    # POST /{delivery_id}/approve. Nothing is sent until that happens.
+    return _delivery_response(delivery)
+
+
+@router.post("/{delivery_id}/approve")
+def approve_invoice_delivery(
+    delivery_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[InternalUser, Depends(require_role("ADMIN", "DELIVERY_MANAGER"))],
+) -> dict:
+    """The human approval gate: a DRAFT delivery is not sent anywhere
+    until this is called. Creates the DeliveryAttempt rows and enqueues
+    the actual email/WhatsApp dispatch.
+    """
+    delivery = db.query(InvoiceDelivery).filter_by(id=delivery_id).one_or_none()
+    if delivery is None:
+        raise HTTPException(status_code=404, detail="delivery not found")
+
+    try:
+        approve_delivery(db, delivery, approved_by_user_id=user.id)
+    except DeliveryNotDraftError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    from app.tasks.delivery_tasks import (
+        send_email_attempt_task,
+        send_whatsapp_attempt_task,
+    )
 
     for attempt in db.query(DeliveryAttempt).filter_by(delivery_id=delivery.id).all():
         if attempt.channel == "EMAIL":
             send_email_attempt_task.delay(
-                attempt.id, attach_pdf=fields.attach_pdf_to_email, include_download_link=fields.include_download_link
+                attempt.id,
+                attach_pdf=delivery.attach_pdf_to_email,
+                include_download_link=delivery.include_download_link,
             )
-        elif attempt.channel == "WHATSAPP" and fields.send_whatsapp_notification:
-            send_whatsapp_attempt_task.delay(attempt.id, include_download_link=fields.include_download_link)
+        elif attempt.channel == "WHATSAPP" and delivery.send_whatsapp_notification:
+            send_whatsapp_attempt_task.delay(attempt.id, include_download_link=delivery.include_download_link)
 
     return _delivery_response(delivery)
 
@@ -296,7 +336,10 @@ def resend_invoice_delivery(
     if delivery is None:
         raise HTTPException(status_code=404, detail="delivery not found")
 
-    from app.tasks.delivery_tasks import send_email_attempt_task, send_whatsapp_attempt_task
+    from app.tasks.delivery_tasks import (
+        send_email_attempt_task,
+        send_whatsapp_attempt_task,
+    )
 
     created_attempts = []
     for channel in channels:

@@ -16,7 +16,7 @@ regardless of what the rollup status says.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -51,6 +51,12 @@ def create_delivery(
     fields: InvoiceDeliveryRequestFields,
     correlation_id: str,
 ) -> InvoiceDelivery:
+    """Creates the delivery as a human-reviewable DRAFT. No DeliveryAttempt
+    row is created and nothing is dispatched yet — see `approve_delivery()`.
+    This is a deliberate gate (added on top of the original spec): every
+    delivery, uploaded or generated, waits for an authorized human
+    approval before anything is sent by email or WhatsApp.
+    """
     delivery = InvoiceDelivery(
         document_id=document.id,
         recipient_name=fields.recipient_name,
@@ -59,7 +65,10 @@ def create_delivery(
         requested_channels_json=fields.requested_channels,
         external_reference=fields.external_reference,
         invoice_number=fields.invoice_number,
-        status="DELIVERY_CREATED",
+        attach_pdf_to_email=fields.attach_pdf_to_email,
+        include_download_link=fields.include_download_link,
+        send_whatsapp_notification=fields.send_whatsapp_notification,
+        status="DRAFT",
         idempotency_key=fields.idempotency_key,
         correlation_id=correlation_id,
     )
@@ -67,21 +76,41 @@ def create_delivery(
     db.commit()
     record_event(
         db, correlation_id=correlation_id, entity_type="InvoiceDelivery", entity_id=delivery.id,
-        event_name="DELIVERY_CREATED", actor_type="API", new_state="DELIVERY_CREATED",
+        event_name="DRAFT_CREATED", actor_type="API", new_state="DRAFT",
         safe_payload={"requested_channels": fields.requested_channels},
     )
+    return delivery
 
-    for channel in fields.requested_channels:
+
+def approve_delivery(db: Session, delivery: InvoiceDelivery, *, approved_by_user_id: str) -> InvoiceDelivery:
+    """The human-approval step: creates one DeliveryAttempt per requested
+    channel and moves the delivery to QUEUED. The caller (API layer) is
+    responsible for then enqueuing the actual Celery dispatch tasks —
+    this function only prepares the rows, matching the pattern the rest
+    of the workflow already uses.
+    """
+    if delivery.status != "DRAFT":
+        raise DeliveryNotDraftError(delivery.id, delivery.status)
+
+    for channel in delivery.requested_channels_json:
         attempt = DeliveryAttempt(delivery_id=delivery.id, channel=channel.upper(), attempt_number=1, status="QUEUED")
         db.add(attempt)
     delivery.status = "QUEUED"
     db.add(delivery)
     db.commit()
     record_event(
-        db, correlation_id=correlation_id, entity_type="InvoiceDelivery", entity_id=delivery.id,
-        event_name="QUEUED", actor_type="SYSTEM", previous_state="DELIVERY_CREATED", new_state="QUEUED",
+        db, correlation_id=delivery.correlation_id, entity_type="InvoiceDelivery", entity_id=delivery.id,
+        event_name="DELIVERY_APPROVED", actor_type="USER", actor_id=approved_by_user_id,
+        previous_state="DRAFT", new_state="QUEUED",
     )
     return delivery
+
+
+class DeliveryNotDraftError(Exception):
+    def __init__(self, delivery_id: str, current_status: str) -> None:
+        self.delivery_id = delivery_id
+        self.current_status = current_status
+        super().__init__(f"delivery {delivery_id} is not in DRAFT (current status: {current_status})")
 
 
 def recompute_delivery_status(db: Session, delivery: InvoiceDelivery) -> None:
@@ -184,7 +213,7 @@ def dispatch_email_attempt(
     attempt.status = "SENT"
     attempt.provider = provider.name
     attempt.provider_message_id = message_id
-    attempt.sent_at = datetime.now(timezone.utc)
+    attempt.sent_at = datetime.now(UTC)
     db.add(attempt)
     db.commit()
     record_event(
@@ -231,7 +260,7 @@ def dispatch_whatsapp_attempt(
     attempt.status = "SENT"
     attempt.provider = provider.name
     attempt.provider_message_id = message_id
-    attempt.sent_at = datetime.now(timezone.utc)
+    attempt.sent_at = datetime.now(UTC)
     db.add(attempt)
     db.commit()
     record_event(
@@ -252,7 +281,7 @@ def _mark_configuration_failed(
     attempt.status = "FAILED"
     attempt.error_code = "configuration_failed"
     attempt.error_message_safe = "WhatsApp provider is not configured"
-    attempt.failed_at = datetime.now(timezone.utc)
+    attempt.failed_at = datetime.now(UTC)
     db.add(attempt)
     db.commit()
     record_event(
@@ -294,7 +323,7 @@ def _handle_dispatch_failure(
     attempt.status = "FAILED"
     attempt.error_code = error_code
     attempt.error_message_safe = str(exc)[:500]
-    attempt.failed_at = datetime.now(timezone.utc)
+    attempt.failed_at = datetime.now(UTC)
     db.add(attempt)
     db.commit()
     event_name = "EMAIL_FAILED" if attempt.channel == "EMAIL" else "WHATSAPP_FAILED"
