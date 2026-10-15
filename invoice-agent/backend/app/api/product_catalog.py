@@ -33,6 +33,7 @@ class ProductCatalogItemRequest(BaseModel):
     gst_rate: float
     tax_category: str | None = None
     active: bool = True
+    aliases: list[str] = Field(default_factory=list)
 
 
 def _serialize(item: ProductCatalogItem) -> dict:
@@ -47,6 +48,7 @@ def _serialize(item: ProductCatalogItem) -> dict:
         "gst_rate": float(item.gst_rate),
         "tax_category": item.tax_category,
         "active": item.active,
+        "aliases": item.aliases_json or [],
     }
 
 
@@ -72,7 +74,9 @@ def create_product_catalog_item(
     if existing is not None:
         raise HTTPException(status_code=409, detail="internal_reference already exists")
 
-    item = ProductCatalogItem(**payload.model_dump())
+    data = payload.model_dump()
+    data["aliases_json"] = data.pop("aliases")
+    item = ProductCatalogItem(**data)
     db.add(item)
     db.commit()
     record_event(
@@ -94,7 +98,9 @@ def update_product_catalog_item(
     if item is None:
         raise HTTPException(status_code=404, detail="catalog item not found")
 
-    for field, value in payload.model_dump().items():
+    data = payload.model_dump()
+    data["aliases_json"] = data.pop("aliases")
+    for field, value in data.items():
         setattr(item, field, value)
     db.add(item)
     db.commit()

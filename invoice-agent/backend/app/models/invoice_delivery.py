@@ -41,6 +41,12 @@ class InvoiceDelivery(Base):
     include_download_link: Mapped[bool] = mapped_column(Boolean, default=True)
     send_whatsapp_notification: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Method A default is direct delivery after file validation — no
+    # review step. Set true to route this one upload through
+    # DRAFT_REVIEW_REQUIRED instead; an authorized human must then call
+    # /approve before anything is queued.
+    require_human_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+
     status: Mapped[str] = mapped_column(String(32), default="RECEIVED")
     idempotency_key: Mapped[str] = mapped_column(String(255), index=True)
     correlation_id: Mapped[str] = mapped_column(String(64), index=True)

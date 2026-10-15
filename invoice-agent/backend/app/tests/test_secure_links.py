@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.models.invoice_delivery import InvoiceDelivery
 from app.models.invoice_document import InvoiceDocument
-from app.services.secure_links.service import LinkAccessDenied, create_link, resolve_and_consume, revoke_link
+from app.services.secure_links.service import (
+    LinkAccessDenied,
+    create_link,
+    resolve_and_consume,
+    revoke_link,
+)
 
 
 def _seed_document_and_delivery(db):
@@ -30,7 +35,7 @@ def test_secure_link_expires_after_configured_time(db_session):
     created = create_link(db_session, document_id=doc.id, delivery_id=delivery.id, expiry_days=7, max_downloads=3)
 
     # Simulate the link having already expired.
-    created.record.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    created.record.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     db_session.add(created.record)
     db_session.commit()
 

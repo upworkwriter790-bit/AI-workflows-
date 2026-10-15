@@ -15,7 +15,11 @@ from typing import Any
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
 
-from app.services.whatsapp.base import WhatsAppProvider, WhatsAppProviderEvent, WhatsAppSendPayload
+from app.services.whatsapp.base import (
+    WhatsAppProvider,
+    WhatsAppProviderEvent,
+    WhatsAppSendPayload,
+)
 from app.services.whatsapp.templates import build_template_variables
 
 

@@ -9,12 +9,18 @@ PDF_BYTES = b"%PDF-1.4\n%%EOF"
 
 
 def _upload(client, headers, **overrides):
+    """Defaults to `require_human_approval=True` so most of this file's
+    tests exercise the approval-gated path explicitly — see
+    test_default_upload_dispatches_immediately_without_approval for the
+    (now restored) opposite default.
+    """
     data = {
         "recipient_name": "Buyer Pvt Ltd",
         "recipient_email": "buyer@example.com",
         "recipient_phone": "+919876543210",
         "requested_channels": ["email", "whatsapp"],
         "idempotency_key": "idem-1",
+        "require_human_approval": True,
     }
     data.update(overrides)
     files = {"invoice_file": ("invoice.pdf", PDF_BYTES, "application/pdf")}
@@ -29,7 +35,7 @@ def test_valid_pdf_upload_queues_delivery(harness):
     resp = _upload(harness.client, harness.admin_headers)
     assert resp.status_code == 201
     body = resp.json()
-    assert body["status"] == "DRAFT"
+    assert body["status"] == "DRAFT_REVIEW_REQUIRED"
     assert set(body["requested_channels"]) == {"email", "whatsapp"}
     assert "delivery_id" in body and "correlation_id" in body
 
@@ -62,6 +68,31 @@ def test_delivery_not_dispatched_until_approved(harness):
     assert second_approve.status_code == 200
     repeat_approve = _approve(harness.client, harness.admin_headers, delivery_id)
     assert repeat_approve.status_code == 409
+
+
+def test_default_upload_dispatches_immediately_without_approval(harness):
+    """require_human_approval defaults to false — Method A's default
+    behavior is still direct delivery after file validation, same as
+    before any approval gate existed.
+    """
+    resp = _upload(
+        harness.client, harness.admin_headers, idempotency_key="idem-direct", require_human_approval=False,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["status"] != "DRAFT_REVIEW_REQUIRED"
+
+    db = harness.SessionLocal()
+    try:
+        from app.models.delivery_attempt import DeliveryAttempt
+
+        assert db.query(DeliveryAttempt).filter_by(delivery_id=body["delivery_id"]).count() == 2
+    finally:
+        db.close()
+
+    # Already dispatched — approving it now is a 409, not a no-op.
+    approve_resp = _approve(harness.client, harness.admin_headers, body["delivery_id"])
+    assert approve_resp.status_code == 409
 
 
 def test_non_pdf_upload_rejected(harness):

@@ -222,6 +222,96 @@ reason is logged internally via an audit event, not exposed in the
 response body). On success: streams the PDF directly (local storage) or
 302-redirects to a short-lived signed URL (a real cloud storage adapter).
 
+## Draft-versioning, AI assistants, Quick Create, auth, and directories
+
+This section replaces the old Method B approve/reject/discard contract
+with the human-approval, versioned-draft one actually implemented. See
+`docs/ai-assistants.md` for exactly what the AI can and cannot do.
+
+### `POST /api/v1/auth/login` / `GET /api/v1/auth/me`
+
+No auth on login (`{email, password}` → `{access_token, user_id,
+display_name, role}`); `/me` requires a bearer token and echoes the
+caller's own identity/roles.
+
+### `GET/POST /api/v1/users` (ADMIN only)
+
+Create/list internal users. `POST` body: `{email, display_name,
+password, roles: [...]}` — `roles` is any combination of `ADMIN`,
+`DELIVERY_MANAGER`, `DELIVERY_VIEWER`, `INVOICE_EDITOR`,
+`INVOICE_APPROVER`.
+
+### `POST /api/v1/generated-invoice-deliveries` (now draft-first)
+
+Same request body as before. Response status is now
+`PENDING_HUMAN_REVIEW`, not a terminal state — nothing is numbered
+(unless `INVOICE_NUMBER_ASSIGNMENT_STAGE=DRAFT`, the default, in which
+case a number is reserved but shown with a DRAFT watermark), rendered
+as final, or queued until approval.
+
+### `GET /api/v1/generated-invoice-deliveries/{id}/versions` / `/versions/{n}` / `/versions/{n}/pdf`
+
+Every manual edit or applied AI proposal creates a new, immutable
+`InvoiceDraftVersion`. The first two list/show the version metadata and
+data snapshot; the third streams that version's rendered draft PDF
+(bearer-authenticated, so a plain `<iframe src>` can't use it directly
+— fetch it as a blob and set that as the iframe's `src`, as the
+frontend does).
+
+### `PATCH /api/v1/generated-invoice-deliveries/{id}` (manual edit)
+
+Full-replace edit (same schema as create) while the invoice is
+`PENDING_HUMAN_REVIEW` — 409 once approved/rejected/cancelled.
+Recalculates and creates a new version.
+
+### `POST .../{id}/ai-edit-proposals` → `{instruction}`
+
+Generates (never applies) a proposal. 503 if no AI is configured.
+
+### `GET .../ai-edit-proposals/{proposal_id}`, `POST .../apply`, `POST .../reject`
+
+`apply` is the only way a proposal's content reaches the draft — 409 if
+the draft isn't `PENDING_HUMAN_REVIEW`, the proposal isn't `GENERATED`,
+or the proposal's base version is stale.
+
+### `POST .../{id}/approve` / `.../reject` / `.../cancel`
+
+`approve` (role: `ADMIN`/`INVOICE_APPROVER`) locks the version, renders
+the final unwatermarked PDF, and queues delivery — the only path to
+delivery for Method B. `reject` (same roles, requires `reason`) and
+`cancel` (role: `ADMIN`/`INVOICE_EDITOR`/`INVOICE_APPROVER`, optional
+reason) are terminal — 409 from any status but `PENDING_HUMAN_REVIEW`.
+
+### `POST /api/v1/quick-create/resolve` / `POST /api/v1/quick-create/draft`
+
+Mode B1. `resolve` never writes anything — it returns
+`{outcome, customer, product, missing_critical_fields, clarification,
+warnings, reviewer_summary}`. `draft` re-resolves server-side (never
+trusts a client-sent "ready" flag) and, only if `outcome ==
+READY_FOR_DRAFT`, calls straight into the normal draft-creation
+workflow above — a quick-created draft is otherwise indistinguishable
+from a detailed-form one. A non-ready outcome is a 409 carrying the
+same resolution body, so the UI can show the one clarification question
+or fall back to the detailed form.
+
+### `POST /api/v1/invoice-deliveries` — `require_human_approval` field
+
+Method A's intake form now takes an optional `require_human_approval`
+(form field, default `false`). `false` (the restored default): direct
+delivery after file validation, same as the original spec. `true`:
+holds at `DRAFT_REVIEW_REQUIRED` until `POST /{delivery_id}/approve`.
+
+### `GET/POST/PATCH /api/v1/customers`
+
+The lightweight customer directory Quick Create resolves against —
+explicit create/update only, never auto-written from AI output.
+
+### `GET/POST/PATCH /api/v1/product-catalog` — now with `aliases`
+
+Unchanged except for a new `aliases: string[]` field — alternate
+free-text phrases (e.g. `["annual plan", "premium yearly"]`) Quick
+Create's deterministic matcher checks against.
+
 ## Explicitly removed/unreachable
 
 Per the approved scope change, these routes and the modules behind them

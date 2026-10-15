@@ -6,7 +6,7 @@ message ID.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -59,9 +59,9 @@ def _apply_email_status(db: Session, attempt: DeliveryAttempt, normalized) -> No
     attempt.status = new_status
     attempt.provider_response_safe_json = normalized.detail_safe
     if new_status == "DELIVERED":
-        attempt.delivered_at = datetime.now(timezone.utc)
+        attempt.delivered_at = datetime.now(UTC)
     if new_status in {"BOUNCED", "FAILED"}:
-        attempt.failed_at = datetime.now(timezone.utc)
+        attempt.failed_at = datetime.now(UTC)
         attempt.error_code = attempt.error_code or normalized.event_type
     db.add(attempt)
     db.commit()
@@ -112,9 +112,9 @@ def _apply_whatsapp_status(db: Session, attempt: DeliveryAttempt, normalized) ->
     attempt.status = new_status
     attempt.provider_response_safe_json = normalized.detail_safe
     if new_status == "DELIVERED":
-        attempt.delivered_at = datetime.now(timezone.utc)
+        attempt.delivered_at = datetime.now(UTC)
     if new_status == "FAILED":
-        attempt.failed_at = datetime.now(timezone.utc)
+        attempt.failed_at = datetime.now(UTC)
         attempt.error_code = attempt.error_code or "provider_failed"
     db.add(attempt)
     db.commit()

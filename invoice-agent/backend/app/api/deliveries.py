@@ -88,6 +88,7 @@ async def create_invoice_delivery(
     attach_pdf_to_email: Annotated[bool, Form()] = True,
     include_download_link: Annotated[bool, Form()] = True,
     send_whatsapp_notification: Annotated[bool, Form()] = True,
+    require_human_approval: Annotated[bool, Form()] = False,
 ) -> dict:
     try:
         fields = InvoiceDeliveryRequestFields(
@@ -168,16 +169,36 @@ async def create_invoice_delivery(
         safe_payload={"sha256": sha256, "byte_size": document.byte_size},
     )
 
-    delivery = create_delivery(db, document=document, fields=fields, correlation_id=correlation_id)
+    delivery = create_delivery(
+        db, document=document, fields=fields, correlation_id=correlation_id,
+        require_human_approval=require_human_approval,
+    )
     delivery.created_by_user_id = user.id
     db.add(delivery)
     db.commit()
 
     mark_completed(db, reservation.record, response_reference=delivery.id, delivery_id=delivery.id)
 
-    # Deliberately does NOT enqueue email/WhatsApp dispatch here — the
-    # delivery sits as a DRAFT until an authorized user calls
-    # POST /{delivery_id}/approve. Nothing is sent until that happens.
+    if require_human_approval:
+        # Holds at DRAFT_REVIEW_REQUIRED until an authorized user calls
+        # POST /{delivery_id}/approve. Nothing is sent until that happens.
+        return _delivery_response(delivery)
+
+    # Default behavior: direct delivery after file validation — dispatch
+    # is enqueued immediately, same as before any approval gate existed.
+    from app.tasks.delivery_tasks import (
+        send_email_attempt_task,
+        send_whatsapp_attempt_task,
+    )
+
+    for attempt in db.query(DeliveryAttempt).filter_by(delivery_id=delivery.id).all():
+        if attempt.channel == "EMAIL":
+            send_email_attempt_task.delay(
+                attempt.id, attach_pdf=delivery.attach_pdf_to_email, include_download_link=delivery.include_download_link
+            )
+        elif attempt.channel == "WHATSAPP" and delivery.send_whatsapp_notification:
+            send_whatsapp_attempt_task.delay(attempt.id, include_download_link=delivery.include_download_link)
+
     return _delivery_response(delivery)
 
 

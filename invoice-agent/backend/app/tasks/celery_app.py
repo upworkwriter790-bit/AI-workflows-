@@ -16,6 +16,16 @@ celery_app = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
 )
+
+# Celery's redis backend/transport requires an explicit ssl_cert_reqs for
+# any rediss:// URL (e.g. Upstash) or it raises ValueError on first use —
+# this is not optional config, it's a hard requirement Celery enforces.
+if settings.redis_url.startswith("rediss://"):
+    celery_app.conf.update(
+        broker_use_ssl={"ssl_cert_reqs": "required"},
+        redis_backend_use_ssl={"ssl_cert_reqs": "required"},
+    )
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",

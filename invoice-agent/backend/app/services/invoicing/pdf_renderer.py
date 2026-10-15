@@ -10,7 +10,7 @@ as a config value but not yet built — see app/core/config.py.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -51,6 +51,9 @@ class InvoiceRenderContext:
     tax_calc: GSTCalculationResult
     template_version: str
     reverse_charge_applicable: bool = False
+    # Shown as a diagonal overlay when set (rendered for every draft
+    # version until approval); None on the final, approved PDF.
+    watermark_text: str | None = None
 
 
 def render_invoice_html(ctx: InvoiceRenderContext) -> str:
@@ -86,7 +89,8 @@ def render_invoice_html(ctx: InvoiceRenderContext) -> str:
         amount_in_words=amount_in_words(Decimal(tax.grand_total)),
         reverse_charge_applicable=ctx.reverse_charge_applicable,
         template_version=ctx.template_version,
-        generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        watermark_text=ctx.watermark_text,
     )
 
 

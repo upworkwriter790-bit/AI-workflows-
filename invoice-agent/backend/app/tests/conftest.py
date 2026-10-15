@@ -79,6 +79,9 @@ def harness(tmp_path, monkeypatch):
         PDF_RENDERER="weasyprint",
         EMAIL_PROVIDER="mock",
         WHATSAPP_PROVIDER="mock",
+        AI_PROVIDER="mock",
+        AI_API_KEY="test-ai-key",
+        AI_EDIT_ENABLED=True,
     )
 
     def _get_db_override():
@@ -106,11 +109,21 @@ def harness(tmp_path, monkeypatch):
         email="viewer@test.com", display_name="Viewer", password_hash=hash_password("x"),
         role="DELIVERY_VIEWER",
     )
-    seed_db.add_all([admin, manager, viewer])
+    editor = InternalUser(
+        email="editor@test.com", display_name="Editor", password_hash=hash_password("x"),
+        role="INVOICE_EDITOR",
+    )
+    approver = InternalUser(
+        email="approver@test.com", display_name="Approver", password_hash=hash_password("x"),
+        role="INVOICE_APPROVER",
+    )
+    seed_db.add_all([admin, manager, viewer, editor, approver])
     seed_db.commit()
     admin_token = create_access_token(admin, settings)
     manager_token = create_access_token(manager, settings)
     viewer_token = create_access_token(viewer, settings)
+    editor_token = create_access_token(editor, settings)
+    approver_token = create_access_token(approver, settings)
     seed_db.close()
 
     from app.models.delivery_attempt import DeliveryAttempt
@@ -159,6 +172,8 @@ def harness(tmp_path, monkeypatch):
     h.admin_headers = {"Authorization": f"Bearer {admin_token}"}
     h.manager_headers = {"Authorization": f"Bearer {manager_token}"}
     h.viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
+    h.editor_headers = {"Authorization": f"Bearer {editor_token}"}
+    h.approver_headers = {"Authorization": f"Bearer {approver_token}"}
 
     yield h
 

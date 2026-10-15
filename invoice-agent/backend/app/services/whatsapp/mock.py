@@ -4,7 +4,11 @@ import uuid
 from typing import Any
 
 from app.services.provider_errors import PermanentProviderError, TransientProviderError
-from app.services.whatsapp.base import WhatsAppProvider, WhatsAppProviderEvent, WhatsAppSendPayload
+from app.services.whatsapp.base import (
+    WhatsAppProvider,
+    WhatsAppProviderEvent,
+    WhatsAppSendPayload,
+)
 
 
 class MockWhatsAppProvider(WhatsAppProvider):

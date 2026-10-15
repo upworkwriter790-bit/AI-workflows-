@@ -104,6 +104,43 @@ class Settings(BaseSettings):
     # Retention
     document_retention_days: int = Field(default=90, alias="DOCUMENT_RETENTION_DAYS")
 
+    # First-run convenience: if the internal_users table is empty at
+    # startup, an ADMIN account is seeded with these credentials so the
+    # UI has something to log in with immediately. Change the password
+    # (via the Users screen) before any real deployment.
+    default_admin_email: str = Field(default="admin@example.com", alias="DEFAULT_ADMIN_EMAIL")
+    default_admin_password: str = Field(default="ChangeMe123!", alias="DEFAULT_ADMIN_PASSWORD")
+
+    # Human-approval gate
+    require_human_approval_for_generated_invoices: bool = Field(
+        default=True, alias="REQUIRE_HUMAN_APPROVAL_FOR_GENERATED_INVOICES"
+    )
+    default_require_human_approval_for_uploaded_invoices: bool = Field(
+        default=False, alias="DEFAULT_REQUIRE_HUMAN_APPROVAL_FOR_UPLOADED_INVOICES"
+    )
+    # "DRAFT" reserves the invoice number when the draft is first saved
+    # (shown with a DRAFT watermark until approval); "APPROVAL" waits
+    # until approval to reserve it. Either way the number is reserved
+    # exactly once and never reused.
+    invoice_number_assignment_stage: str = Field(default="DRAFT", alias="INVOICE_NUMBER_ASSIGNMENT_STAGE")
+    draft_watermark_text: str = Field(default="DRAFT - NOT FOR DELIVERY", alias="DRAFT_WATERMARK_TEXT")
+
+    # AI draft-prefill / AI edit-proposal assistant. Disabled gracefully
+    # (not an error) when no API key is configured — see
+    # app/services/ai/factory.py.
+    ai_edit_enabled: bool = Field(default=True, alias="AI_EDIT_ENABLED")
+    ai_provider: str = Field(default="anthropic", alias="AI_PROVIDER")
+    ai_model: str = Field(default="claude-sonnet-4-5", alias="AI_MODEL")
+    ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
+    ai_edit_prompt_version: str = Field(default="v1", alias="AI_EDIT_PROMPT_VERSION")
+    ai_edit_max_proposals_per_hour_per_user: int = Field(
+        default=20, alias="AI_EDIT_MAX_PROPOSALS_PER_HOUR_PER_USER"
+    )
+
+    @property
+    def ai_edit_available(self) -> bool:
+        return self.ai_edit_enabled and bool(self.ai_api_key)
+
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"

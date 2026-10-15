@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,7 @@ def create_link(
         document_id=document_id,
         delivery_id=delivery_id,
         token_hash=_hash_token(token),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=expiry_days),
+        expires_at=datetime.now(UTC) + timedelta(days=expiry_days),
         max_downloads=max_downloads,
         download_count=0,
     )
@@ -71,8 +71,8 @@ def resolve_and_consume(db: Session, token: str) -> SecureDownloadLink:
 
     expires_at = record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) > expires_at:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if datetime.now(UTC) > expires_at:
         raise LinkAccessDenied("expired")
 
     if record.download_count >= record.max_downloads:
@@ -86,6 +86,6 @@ def resolve_and_consume(db: Session, token: str) -> SecureDownloadLink:
 
 
 def revoke_link(db: Session, record: SecureDownloadLink) -> None:
-    record.revoked_at = datetime.now(timezone.utc)
+    record.revoked_at = datetime.now(UTC)
     db.add(record)
     db.commit()

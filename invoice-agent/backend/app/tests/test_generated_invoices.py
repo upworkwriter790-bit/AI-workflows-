@@ -64,7 +64,7 @@ def _post_and_approve(client, headers, payload):
 
 def test_valid_payment_details_generate_exactly_one_pdf(harness):
     draft, approved = _post_and_approve(harness.client, harness.admin_headers, _base_payload())
-    assert draft.json()["status"] == "DRAFT"
+    assert draft.json()["status"] == "PENDING_HUMAN_REVIEW"
     body = approved.json()
     assert body["invoice_number"].startswith("INV/FY")
     assert body["delivery_id"] is not None
@@ -262,9 +262,6 @@ def test_delivery_pipeline_shared_between_both_methods(harness):
         headers=harness.admin_headers,
     )
     assert method_a.status_code == 201
-    harness.client.post(
-        f"/api/v1/invoice-deliveries/{method_a.json()['delivery_id']}/approve", headers=harness.admin_headers
-    )
 
     _, method_b_approved = _post_and_approve(
         harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-shared-b")
@@ -464,15 +461,21 @@ def test_approving_a_non_draft_invoice_is_rejected(harness):
     assert second_approve.status_code == 409
 
 
-def test_discarding_a_draft_leaves_no_invoice_number_reserved(harness):
+def test_cancelling_a_draft_under_approval_stage_numbering_leaves_no_gap(harness):
+    # INVOICE_NUMBER_ASSIGNMENT_STAGE="APPROVAL" is the policy under
+    # which cancelling a draft is guaranteed gap-free — under the
+    # default "DRAFT" stage the number is already reserved and a
+    # cancelled draft's number is a documented, accepted gap.
+    harness.settings.invoice_number_assignment_stage = "APPROVAL"
+
     draft = _post(harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-discard"))
     invoice_id = draft.json()["invoice_id"]
 
-    discard_resp = harness.client.post(
-        f"/api/v1/generated-invoice-deliveries/{invoice_id}/discard", headers=harness.admin_headers
+    cancel_resp = harness.client.post(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}/cancel", headers=harness.admin_headers
     )
-    assert discard_resp.status_code == 200
-    assert discard_resp.json()["status"] == "CANCELLED"
+    assert cancel_resp.status_code == 200
+    assert cancel_resp.json()["status"] == "CANCELLED"
 
     db = harness.SessionLocal()
     try:
@@ -487,21 +490,21 @@ def test_discarding_a_draft_leaves_no_invoice_number_reserved(harness):
     next_payload["external_reference"] = "ORD-300"
     next_payload["payment_or_order_details"]["payment_reference"] = "PAY-300"
     _next_draft, next_approved = _post_and_approve(harness.client, harness.admin_headers, next_payload)
-    # No gap was left in the sequence by the discarded draft, which never
-    # reserved a number.
+    # No gap was left in the sequence by the cancelled draft, which never
+    # reserved a number under the APPROVAL assignment stage.
     assert next_approved.json()["invoice_number"] is not None
 
 
-def test_discarding_a_non_draft_invoice_is_rejected(harness):
+def test_cancelling_a_non_draft_invoice_is_rejected(harness):
     draft, _ = _post_and_approve(
         harness.client, harness.admin_headers, _base_payload(idempotency_key="gi-discard-locked")
     )
     invoice_id = draft.json()["invoice_id"]
 
-    discard_resp = harness.client.post(
-        f"/api/v1/generated-invoice-deliveries/{invoice_id}/discard", headers=harness.admin_headers
+    cancel_resp = harness.client.post(
+        f"/api/v1/generated-invoice-deliveries/{invoice_id}/cancel", headers=harness.admin_headers
     )
-    assert discard_resp.status_code == 409
+    assert cancel_resp.status_code == 409
 
 
 def test_nothing_is_dispatched_until_approval(harness, monkeypatch):

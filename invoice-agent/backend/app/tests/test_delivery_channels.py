@@ -22,12 +22,14 @@ def _upload(client, headers, **overrides):
 
 
 def _upload_and_approve(client, headers, **overrides):
+    """require_human_approval defaults to false — the upload itself
+    dispatches immediately, so there's no separate approve call needed
+    (kept the name since every test below calls it expecting dispatch
+    outcomes to already be visible on the response).
+    """
     resp = _upload(client, headers, **overrides)
     assert resp.status_code == 201
-    delivery_id = resp.json()["delivery_id"]
-    approve_resp = client.post(f"/api/v1/invoice-deliveries/{delivery_id}/approve", headers=headers)
-    assert approve_resp.status_code == 200
-    return approve_resp
+    return resp
 
 
 def test_email_delivery_creates_attempt_with_pdf_attachment(harness):

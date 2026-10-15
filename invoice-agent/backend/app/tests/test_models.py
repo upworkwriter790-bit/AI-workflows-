@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.models.audit_event import AuditEvent
 from app.models.delivery_attempt import DeliveryAttempt
@@ -88,7 +88,7 @@ def test_secure_download_link_roundtrip(db_session):
 
     link = SecureDownloadLink(
         document_id=doc.id, delivery_id=delivery.id, token_hash="e" * 64,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7), max_downloads=3, download_count=0,
+        expires_at=datetime.now(UTC) + timedelta(days=7), max_downloads=3, download_count=0,
     )
     db_session.add(link)
     db_session.commit()

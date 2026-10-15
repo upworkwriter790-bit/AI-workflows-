@@ -20,13 +20,18 @@ from app.db.base import Base
 
 
 class GeneratedInvoice(Base):
-    """A Method-B invoice. Sits as an editable `DRAFT` (no invoice number,
-    no PDF, no InvoiceDocument/InvoiceDelivery yet) until an authorized
-    user calls the approve endpoint. Immutable once `generated_at` is set
-    (spec §6) — application code must never update invoice_number,
+    """A Method-B invoice. Sits as an editable, versioned draft
+    (PENDING_HUMAN_REVIEW) — every manual edit or applied AI proposal
+    creates a new immutable InvoiceDraftVersion row, never mutates one in
+    place — until an authorized INVOICE_APPROVER/ADMIN calls the approve
+    endpoint. Only then is the invoice number finalized (or, if
+    `invoice_number_assignment_stage=DRAFT`, already-reserved at draft
+    creation and merely no longer shown with a DRAFT watermark), the
+    final PDF rendered, and delivery queued. Immutable once `locked_at`
+    is set — application code must never update invoice_number,
     calculation_snapshot_json, the financial columns, or pdf_sha256 after
-    that point, only create a separate credit-note/replacement record in
-    a future design.
+    that point; a correction is a new, separate draft, never an edit to
+    this row.
     """
 
     __tablename__ = "generated_invoices"
@@ -92,8 +97,24 @@ class GeneratedInvoice(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     correlation_id: Mapped[str] = mapped_column(String(64), index=True)
     created_by_user_id: Mapped[str | None] = mapped_column(String(36))
+    customer_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("customers.id"))
+
+    # Draft versioning (InvoiceDraftVersion rows hold the actual
+    # snapshots; these two columns are just pointers into that history).
+    current_version_number: Mapped[int] = mapped_column(default=1)
+    approved_version_number: Mapped[int | None] = mapped_column()
+    invoice_number_assignment_stage: Mapped[str] = mapped_column(String(16), default="DRAFT")
+
     approved_by_user_id: Mapped[str | None] = mapped_column(String(36))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_by_user_id: Mapped[str | None] = mapped_column(String(36))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str | None] = mapped_column(String(500))
+
+    final_document_id: Mapped[str | None] = mapped_column(String(36))
+    final_pdf_sha256: Mapped[str | None] = mapped_column(String(64))
+    finalization_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

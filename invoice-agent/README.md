@@ -16,6 +16,36 @@ the same delivery pipeline:
 Both methods keep a private copy of the document and a complete audit
 trail of every delivery attempt.
 
+## Human approval — the non-negotiable gate
+
+Neither method ever sends anything automatically, and the AI never
+approves, sends, or finalizes anything:
+
+- **Method A**: default behavior is direct delivery after file
+  validation (unchanged from the base spec). Passing
+  `require_human_approval=true` on upload instead holds it at
+  `DRAFT_REVIEW_REQUIRED` until an authorized human calls
+  `POST /{delivery_id}/approve`.
+- **Method B**: every generated invoice is a versioned, editable
+  `PENDING_HUMAN_REVIEW` draft — no invoice number shown as final, no
+  final PDF, nothing queued — until an `INVOICE_APPROVER`/`ADMIN`
+  explicitly approves it. A human can edit it directly, or describe a
+  change in plain language to an **AI edit assistant**, which only ever
+  proposes a diff; a human must click Apply before anything changes.
+  Every edit (manual or AI-applied) creates a new immutable
+  `InvoiceDraftVersion` — nothing is overwritten. Once approved, the
+  invoice is locked; a correction is a new draft, never a silent edit.
+- **Quick Create** (Mode B1): the low-friction intake — give a payment
+  snapshot (who paid, how much, a reference, and what for), and the
+  system resolves the rest from your product catalog and customer
+  directory via deterministic exact-match lookups plus an AI router
+  that only ever picks among candidates the backend already found (or
+  asks one targeted question). It never invents a price, HSN/SAC, GST
+  rate, GSTIN, or address. See `docs/ai-assistants.md`.
+
+See `frontend/README.md` for the plain-HTML UI this all drives, and
+`docs/api-contracts.md` for every endpoint.
+
 ## What this system does
 
 - **Method A**: `POST /api/v1/invoice-deliveries` (multipart) — upload an

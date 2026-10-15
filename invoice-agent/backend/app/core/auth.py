@@ -1,13 +1,14 @@
 """Minimal JWT-based internal-user authentication + role-based
-authorization. Scoped to exactly what the dashboard needs (§13): three
-roles (ADMIN, DELIVERY_MANAGER, DELIVERY_VIEWER), a bearer token, and a
-`require_role()` dependency to gate resend/cancel/revoke/settings. No
-external auth provider, no session store — this is deliberately small.
+authorization. Five roles: ADMIN, DELIVERY_MANAGER, DELIVERY_VIEWER
+(Method A / delivery operations) and INVOICE_EDITOR, INVOICE_APPROVER
+(Method B draft editing and approval). A user may hold more than one —
+see InternalUser.has_role(). No external auth provider, no session
+store — this is deliberately small.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import bcrypt
@@ -20,7 +21,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models.internal_user import InternalUser
 
-ROLES = ("ADMIN", "DELIVERY_MANAGER", "DELIVERY_VIEWER")
+ROLES = ("ADMIN", "DELIVERY_MANAGER", "DELIVERY_VIEWER", "INVOICE_EDITOR", "INVOICE_APPROVER")
 JWT_ALGORITHM = "HS256"
 TOKEN_TTL = timedelta(hours=12)
 
@@ -36,7 +37,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(user: InternalUser, settings: Settings) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": user.id,
         "role": user.role,
@@ -69,12 +70,16 @@ def get_current_user(
 
 
 def require_role(*allowed_roles: str):
+    """ADMIN always passes — it is the superset role (§12). Everyone
+    else needs at least one of `allowed_roles` in their own role set.
+    """
+
     def _dependency(user: Annotated[InternalUser, Depends(get_current_user)]) -> InternalUser:
-        if user.role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"role {user.role!r} is not permitted to perform this action",
-            )
-        return user
+        if user.has_role("ADMIN") or user.has_role(*allowed_roles):
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"role(s) {user.role!r} not permitted to perform this action",
+        )
 
     return _dependency

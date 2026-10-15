@@ -11,9 +11,10 @@ from app.db.base import Base
 
 class InternalUser(Base):
     """Minimal internal-user record backing the dashboard's role-based
-    authorization (§13). Not a customer/recipient record — those stay
-    inline on InvoiceDelivery, since this system no longer maintains a
-    CRM-style customer directory.
+    authorization. A user can hold more than one role (e.g. an
+    INVOICE_APPROVER who is also an INVOICE_EDITOR), stored as a
+    comma-separated string — simpler than a join table for this user
+    count, see `role_set`/`has_role()`.
     """
 
     __tablename__ = "internal_users"
@@ -22,7 +23,16 @@ class InternalUser(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(32))  # ADMIN|DELIVERY_MANAGER|DELIVERY_VIEWER
+    # Comma-separated, e.g. "ADMIN" or "INVOICE_EDITOR,INVOICE_APPROVER".
+    # See app/core/auth.py:ROLES for the full set.
+    role: Mapped[str] = mapped_column(String(128))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def role_set(self) -> set[str]:
+        return {r.strip() for r in self.role.split(",") if r.strip()}
+
+    def has_role(self, *roles: str) -> bool:
+        return bool(self.role_set & set(roles))

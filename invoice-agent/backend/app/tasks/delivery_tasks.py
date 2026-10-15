@@ -11,7 +11,10 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models.delivery_attempt import DeliveryAttempt
 from app.tasks.celery_app import celery_app
-from app.workflows.delivery_workflow import dispatch_email_attempt, dispatch_whatsapp_attempt
+from app.workflows.delivery_workflow import (
+    dispatch_email_attempt,
+    dispatch_whatsapp_attempt,
+)
 
 
 @celery_app.task(name="send_email_attempt", bind=True)

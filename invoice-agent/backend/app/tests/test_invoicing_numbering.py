@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import date
 
 from app.core.config import Settings
-from app.services.invoicing.numbering import financial_year_label, reserve_invoice_number
+from app.services.invoicing.numbering import (
+    financial_year_label,
+    reserve_invoice_number,
+)
 
 
 def test_financial_year_label_april_start():

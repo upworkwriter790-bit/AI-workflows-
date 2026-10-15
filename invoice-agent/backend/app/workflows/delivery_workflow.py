@@ -44,19 +44,33 @@ class DispatchOutcome:
     retry_after_seconds: int | None = None
 
 
+REVIEW_REQUIRED = "DRAFT_REVIEW_REQUIRED"
+
+
+def _queue_attempts(db: Session, delivery: InvoiceDelivery) -> None:
+    for channel in delivery.requested_channels_json:
+        db.add(DeliveryAttempt(delivery_id=delivery.id, channel=channel.upper(), attempt_number=1, status="QUEUED"))
+
+
 def create_delivery(
     db: Session,
     *,
     document: InvoiceDocument,
     fields: InvoiceDeliveryRequestFields,
     correlation_id: str,
+    require_human_approval: bool = False,
 ) -> InvoiceDelivery:
-    """Creates the delivery as a human-reviewable DRAFT. No DeliveryAttempt
-    row is created and nothing is dispatched yet — see `approve_delivery()`.
-    This is a deliberate gate (added on top of the original spec): every
-    delivery, uploaded or generated, waits for an authorized human
-    approval before anything is sent by email or WhatsApp.
+    """Method A's default (`require_human_approval=False`) is direct
+    delivery after file validation — this creates the DeliveryAttempt
+    rows immediately and the caller enqueues dispatch right away, same
+    as before any approval gate existed. Passing `require_human_approval
+    =True` instead holds the delivery at DRAFT_REVIEW_REQUIRED until a
+    separate call to `approve_delivery()` — nothing is created or
+    dispatched until that happens. Method B always passes True here
+    (approve_and_finalize immediately follows with approve_delivery(),
+    since the invoice approval itself is the human's send authorization).
     """
+    status = REVIEW_REQUIRED if require_human_approval else "QUEUED"
     delivery = InvoiceDelivery(
         document_id=document.id,
         recipient_name=fields.recipient_name,
@@ -68,40 +82,43 @@ def create_delivery(
         attach_pdf_to_email=fields.attach_pdf_to_email,
         include_download_link=fields.include_download_link,
         send_whatsapp_notification=fields.send_whatsapp_notification,
-        status="DRAFT",
+        require_human_approval=require_human_approval,
+        status=status,
         idempotency_key=fields.idempotency_key,
         correlation_id=correlation_id,
     )
     db.add(delivery)
     db.commit()
+    if not require_human_approval:
+        _queue_attempts(db, delivery)
+        db.commit()
     record_event(
         db, correlation_id=correlation_id, entity_type="InvoiceDelivery", entity_id=delivery.id,
-        event_name="DRAFT_CREATED", actor_type="API", new_state="DRAFT",
+        event_name=status, actor_type="API", new_state=status,
         safe_payload={"requested_channels": fields.requested_channels},
     )
     return delivery
 
 
 def approve_delivery(db: Session, delivery: InvoiceDelivery, *, approved_by_user_id: str) -> InvoiceDelivery:
-    """The human-approval step: creates one DeliveryAttempt per requested
+    """The human-approval step for a delivery held at
+    DRAFT_REVIEW_REQUIRED: creates one DeliveryAttempt per requested
     channel and moves the delivery to QUEUED. The caller (API layer) is
     responsible for then enqueuing the actual Celery dispatch tasks —
     this function only prepares the rows, matching the pattern the rest
     of the workflow already uses.
     """
-    if delivery.status != "DRAFT":
+    if delivery.status != REVIEW_REQUIRED:
         raise DeliveryNotDraftError(delivery.id, delivery.status)
 
-    for channel in delivery.requested_channels_json:
-        attempt = DeliveryAttempt(delivery_id=delivery.id, channel=channel.upper(), attempt_number=1, status="QUEUED")
-        db.add(attempt)
+    _queue_attempts(db, delivery)
     delivery.status = "QUEUED"
     db.add(delivery)
     db.commit()
     record_event(
         db, correlation_id=delivery.correlation_id, entity_type="InvoiceDelivery", entity_id=delivery.id,
         event_name="DELIVERY_APPROVED", actor_type="USER", actor_id=approved_by_user_id,
-        previous_state="DRAFT", new_state="QUEUED",
+        previous_state=REVIEW_REQUIRED, new_state="QUEUED",
     )
     return delivery
 
@@ -110,7 +127,9 @@ class DeliveryNotDraftError(Exception):
     def __init__(self, delivery_id: str, current_status: str) -> None:
         self.delivery_id = delivery_id
         self.current_status = current_status
-        super().__init__(f"delivery {delivery_id} is not in DRAFT (current status: {current_status})")
+        super().__init__(
+            f"delivery {delivery_id} is not in {REVIEW_REQUIRED} (current status: {current_status})"
+        )
 
 
 def recompute_delivery_status(db: Session, delivery: InvoiceDelivery) -> None:

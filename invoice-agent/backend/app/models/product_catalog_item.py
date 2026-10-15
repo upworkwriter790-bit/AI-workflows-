@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Numeric, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -23,6 +23,11 @@ class ProductCatalogItem(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     internal_reference: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     display_description: Mapped[str] = mapped_column(String(500))
+    # Lowercase alternate names/phrases a human or the AI prefill
+    # assistant may use to refer to this item in free text, e.g.
+    # ["annual plan", "premium yearly"]. Matching is exact-substring
+    # only — no fuzzy library.
+    aliases_json: Mapped[list] = mapped_column(JSON, default=list)
     product_type: Mapped[str] = mapped_column(String(16))  # GOODS | SERVICE
     hsn_or_sac_code: Mapped[str] = mapped_column(String(16))
     unit: Mapped[str] = mapped_column(String(16))
