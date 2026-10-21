@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#070b12">
+<link rel="icon" href="assets/logo-mark.png" type="image/png">
+<title>Ilactic — Minds. Gaps. Agents.</title>
+<meta name="description" content="Ilactic builds AI agents, products, and systems that close the gaps between what teams need and what their tools can do.">
+<script>(function(){var d=document.documentElement;d.classList.add('js');var rm=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;var sd=navigator.connection&&navigator.connection.saveData;if(!rm&&!sd)d.classList.add('ptl');setTimeout(function(){if(!window.__reveal)d.classList.remove('js');if(!window.__ptl)d.classList.remove('ptl')},3500);})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Michroma&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="css/style.css?v=18">
+</head>
+<body>
+
+<a class="skip-link" href="#top">Skip to content</a>
+<canvas id="bg-rain" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a href="#top" class="logo">
+      <span class="logo-mark" aria-hidden="true">
+        <img src="assets/logo-mark.png" alt="" width="266" height="236">
+      </span>
+      <span class="logo-text">ILACTIC</span>
+    </a>
+      <nav class="site-nav" id="site-nav" aria-label="Primary">
+        <a href="#about">About</a>
+        <div class="nav-item">
+          <a href="#work" class="nav-parent" aria-haspopup="true">Products</a>
+          <button type="button" class="nav-toggle-chevron" aria-label="Toggle Products submenu" aria-expanded="false">
+            <svg viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+          </button>
+          <ul class="nav-menu" role="list">
+            <li><a href="aios.html">AI Operating System</a></li>
+            <li><a href="#product-voice">Voice Calling Agents</a></li>
+            <li>
+              <a href="#product-social">Social Media Desk</a>
+              <ul class="nav-sub" role="list">
+                <li><a href="#product-social">LinkedIn Desk</a></li>
+                <li><a href="#product-social">YouTube Desk</a></li>
+                <li><a href="#product-social">InstaDesk</a></li>
+              </ul>
+            </li>
+            <li><a href="#product-consultant">AI Consultant</a></li>
+            <li><a href="#product-agents">Custom AI Agents</a></li>
+            <li><a href="#product-automation">Automation &amp; Integration</a></li>
+          </ul>
+        </div>
+        <a href="audit.html">Audit</a>
+        <a href="#contact">Contact</a>
+        <a href="#" class="nav-cta" id="join-community">Join community</a>
+      </nav>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
+  </div>
+</header>
+
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <canvas class="hero-particles" id="hero-particles" aria-hidden="true"></canvas>
+    <div class="wrap hero-inner">
+      <p class="eyebrow" data-reveal="fade">AI systems &amp; consultancy</p>
+      <h1 class="hero-title">
+        <span class="hero-logo-frame" data-reveal="clip" style="--base:140ms">
+          <img class="hero-logo" width="1944" height="809" src="assets/ilactic-logo.png" alt="Ilactic. Minds. Gaps. Agents.">
+        </span>
+      </h1>
+      <p class="hero-lede" data-reveal="fade" style="--base:780ms">
+        Most businesses run on six tools and whatever one person remembers to check.
+        We tell you exactly where AI closes that gap — then build the agents, products,
+        and automation that actually do it.
+      </p>
+      <div class="hero-actions" data-reveal="fade" style="--base:900ms">
+        <a href="#work" class="btn btn-primary">See what we build</a>
+        <a href="#contact" class="btn btn-outline">Start a conversation</a>
+      </div>
+    </div>
+    <div class="hero-fade" aria-hidden="true"></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="about" class="section about">
+    <div class="wrap about-grid">
+      <div class="about-copy">
+        <p class="eyebrow" data-reveal="fade">01 — About</p>
+        <h2 data-reveal="words" style="--base:80ms">Every business has a gap<br>between intent and execution.</h2>
+        <p class="lede" data-reveal="fade" style="--base:320ms">
+          Ilactic exists in that gap. We build the agents, products, and infrastructure
+          that let a business think at the speed of AI instead of the speed of its
+          slowest process. Small studio, deliberately — every engagement gets our full
+          attention, not a account manager's spare cycles.
+        </p>
+      </div>
+      <ul class="about-stats" role="list">
+        <li data-reveal="up" style="--i:0">
+          <span class="stat-label">Minds</span>
+          <span class="stat-desc">Strategy and reasoning behind every system we design — not just code, judgment.</span>
+        </li>
+        <li data-reveal="up" style="--i:1">
+          <span class="stat-label">Gaps</span>
+          <span class="stat-desc">The friction between departments, tools, and data that most teams route around instead of solving.</span>
+        </li>
+        <li data-reveal="up" style="--i:2">
+          <span class="stat-label">Agents</span>
+          <span class="stat-desc">Autonomous systems that do the closing — quietly, reliably, in the background.</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- PRODUCTS / SERVICES -->
+  <section id="work" class="section work">
+    <div class="wrap">
+      <p class="eyebrow" data-reveal="fade">02 — Products</p>
+      <h2 data-reveal="words" style="--base:80ms">What we're building.</h2>
+      <p class="lede section-lede" data-reveal="fade" style="--base:320ms">
+        This is a living catalog — we're a young studio and it grows as new work ships.
+        Here's where it's headed.
+      </p>
+
+      <!-- TODO: every .catalog-link below is a placeholder (href="#"). Replace each with the hosted URL for that product. -->
+      <div class="catalog">
+        <div class="catalog-col">
+          <article class="catalog-row" id="product-os" data-reveal="fade">
+            <div class="catalog-row-top">
+              <span class="pi" data-orb="working" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="l"><path d="M12 12L5 5M12 12l7-7M12 12l-7 7M12 12l7 7"/></g><circle class="n" style="--i:0" cx="12" cy="12" r="2.6"/><circle class="n" style="--i:1" cx="5" cy="5" r="1.8"/><circle class="n" style="--i:2" cx="19" cy="5" r="1.8"/><circle class="n" style="--i:3" cx="5" cy="19" r="1.8"/><circle class="n" style="--i:4" cx="19" cy="19" r="1.8"/></svg><canvas class="pi-orb" aria-hidden="true"></canvas></span>
+              <h3>AI Operating System</h3>
+            </div>
+            <p>One operating layer for your business. Your agents, tools and data connected in a single place, so work is routed, run and tracked without anyone stitching it together by hand.</p>
+            <a class="catalog-link" href="aios.html" aria-label="Learn more about AI Operating System">
+              <span class="t">Learn more</span><svg class="arr" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg>
+            </a>
+          </article>
+
+          <article class="catalog-row" id="product-voice" data-reveal="fade">
+            <div class="catalog-row-top">
+              <span class="pi" data-orb="searching" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="b" style="--i:0" d="M4 10v4"/><path class="b" style="--i:1" d="M8 7v10"/><path class="b" style="--i:2" d="M12 4v16"/><path class="b" style="--i:3" d="M16 8v8"/><path class="b" style="--i:4" d="M20 11v2"/></svg><canvas class="pi-orb" aria-hidden="true"></canvas></span>
+              <h3>Voice Calling Agents</h3>
+            </div>
+            <p>Agents that handle your calls in natural conversation — qualifying leads, booking appointments, chasing follow-ups — inbound and outbound, around the clock.</p>
+            <a class="catalog-link" href="#" target="_blank" rel="noopener" aria-label="Learn more about Voice Calling Agents">
+              <span class="t">Learn more</span><svg class="arr" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg>
+            </a>
+          </article>
+
+          <article class="catalog-row" id="product-social" data-reveal="fade">
+            <div class="catalog-row-top">
+              <span class="pi" data-orb="solving" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="l"><path d="M6 12l12-6.5M6 12l12 6.5"/></g><circle class="n" style="--i:0" cx="6" cy="12" r="2.4"/><circle class="n" style="--i:1" cx="18" cy="5.5" r="2"/><circle class="n" style="--i:2" cx="18" cy="18.5" r="2"/></svg><canvas class="pi-orb" aria-hidden="true"></canvas></span>
+              <h3>Social Media Desk</h3>
+            </div>
+            <p>One desk running your social presence. Each desk handles the content, scheduling, replies and reporting for its own channel.</p>
+            <ul class="desk-list" role="list">
+              <li>
+                <span class="desk-name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M7.5 9.5h9M7.5 13h9M7.5 16.5h5"/></svg>LinkedIn Desk</span>
+                <span class="desk-desc">Posts, comment replies and follow-ups that keep your B2B presence warm.</span>
+              </li>
+              <li>
+                <span class="desk-name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="4"/><path d="M10.2 9.4l4.6 2.6-4.6 2.6z"/></svg>YouTube Desk</span>
+                <span class="desk-desc">Titles, descriptions, chapters and comment moderation on every upload.</span>
+              </li>
+              <li>
+                <span class="desk-name"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="16.8" cy="7.2" r="0.6"/></svg>InstaDesk</span>
+                <span class="desk-desc">Reels captions, story cadence and DM triage handled for you.</span>
+              </li>
+            </ul>
+            <a class="catalog-link" href="#" target="_blank" rel="noopener" aria-label="Learn more about Social Media Desk">
+              <span class="t">Learn more</span><svg class="arr" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg>
+            </a>
+          </article>
+
+          <article class="catalog-row" id="product-consultant" data-reveal="fade">
+            <div class="catalog-row-top">
+              <span class="pi" data-orb="listening" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="l"><rect x="5" y="4.5" width="14" height="16.5" rx="2.2"/><path d="M9 3.2h6v3.2H9z"/><path d="M8.6 13.4l2.4 2.4 4.4-4.8"/></g></svg><canvas class="pi-orb" aria-hidden="true"></canvas></span>
+              <h3>AI Consultant</h3>
+            </div>
+            <p>We go through your business end to end — every process, team and tool — and map exactly where AI fits, where manpower and spend come down, and what the payback actually looks like.</p>
+            <a class="catalog-link" href="#" target="_blank" rel="noopener" aria-label="Learn more about AI Consultant">
+              <span class="t">Learn more</span><svg class="arr" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg>
+            </a>
+          </article>
+
+          <article class="catalog-row" id="product-agents" data-reveal="fade">
+            <div class="catalog-row-top">
+              <span class="pi" data-orb="connecting" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="l"><rect x="4.5" y="8" width="15" height="11" rx="4"/><path d="M12 8V5.4M2.6 12.5v3M21.4 12.5v3"/></g><circle class="n" style="--i:0" cx="12" cy="4" r="1.5"/><circle class="n" style="--i:1" cx="9" cy="13.5" r="1.3"/><circle class="n" style="--i:2" cx="15" cy="13.5" r="1.3"/></svg><canvas class="pi-orb" aria-hidden="true"></canvas></span>
+              <h3>Custom AI Agents</h3>
+            </div>
+            <p>Purpose-built agents that plug into your existing workflow — support, research, ops — and handle the parts that shouldn't need a human.</p>
+            <a class="catalog-link" href="#" target="_blank" rel="noopener" aria-label="Learn more about Custom AI Agents">
+              <span class="t">Learn more</span><svg class="arr" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg>
+            </a>
+          </article>
+
+          <article class="catalog-row" id="product-automation" data-reveal="fade">
+            <div class="catalog-row-top">
+              <span class="pi" data-orb="weaving" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="l"><path d="M5 12a7 7 0 0 1 12-4.9M17 3.2v3.9h-3.9"/><path d="M19 12a7 7 0 0 1-12 4.9M7 20.8v-3.9h3.9"/></g><circle class="n" style="--i:0" cx="12" cy="12" r="1.5"/></svg><canvas class="pi-orb" aria-hidden="true"></canvas></span>
+              <h3>Automation &amp; Integration</h3>
+            </div>
+            <p>Connecting the tools you already run so information moves on its own instead of through someone's inbox.</p>
+            <a class="catalog-link" href="#" target="_blank" rel="noopener" aria-label="Learn more about Automation & Integration">
+              <span class="t">Learn more</span><svg class="arr" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg>
+            </a>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact" class="section contact">
+    <div class="wrap contact-grid">
+      <div class="contact-intro">
+        <p class="eyebrow" data-reveal="fade">03 — Contact</p>
+        <h2 data-reveal="words" style="--base:80ms">Tell us what needs closing.</h2>
+        <p class="lede" data-reveal="fade" style="--base:320ms">
+          Whether it's a specific agent you need built or a rough idea you haven't
+          scoped yet, start here. We read everything ourselves.
+        </p>
+      </div>
+
+      <form class="contact-form" id="contact-form" data-reveal="fade" style="--base:200ms" novalidate>
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="message">What are you trying to build?</label>
+          <textarea id="message" name="message" rows="4" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary form-submit">Send message</button>
+        <p class="form-note" id="form-note" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-brand">
+      <span class="logo-text small">ILACTIC</span>
+      <span class="footer-tagline">Minds. Gaps. Agents.</span>
+    </div>
+    <div class="footer-copy">
+      <p>&copy; Ilactic <span id="year"></span></p>
+      <p class="footer-entity">Econfin Exploration Pvt Ltd</p>
+    </div>
+  </div>
+  <div class="wrap footer-legal">
+    <a href="terms.html">Terms &amp; Conditions</a>
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="mailto:support@ilactic.com">Support</a>
+  </div>
+</footer>
+
+<aside class="audit-pop" id="audit-pop" aria-label="AI audit for business" aria-hidden="true" inert>
+  <button type="button" class="audit-pop-close" id="audit-pop-close" aria-label="Dismiss">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+  </button>
+  <div class="audit-pop-price">
+    <span class="price-old">₹5,000</span>
+    <span class="price-new">₹150</span>
+  </div>
+  <p class="audit-pop-badge">97% off for the first 100 people</p>
+  <h2 class="audit-pop-title">AI Audit for business</h2>
+  <p class="audit-pop-text">Find out where AI can cut manpower and spend in your business.</p>
+  <a href="audit.html" class="btn btn-primary audit-pop-cta" id="audit-pop-link">Get my audit</a>
+</aside>
+
+<div class="join-backdrop" id="join-backdrop" aria-hidden="true" inert>
+  <div class="join-pop" role="dialog" aria-modal="true" aria-label="Join the community">
+    <button type="button" class="join-pop-close" id="join-pop-close" aria-label="Close">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <h2>Join the community</h2>
+    <p class="join-pop-text">Get added to the WhatsApp group — daily AI news, every morning.</p>
+    <form class="join-form" id="join-form" novalidate>
+      <div class="field">
+        <label for="join-name">Your name</label>
+        <input type="text" id="join-name" name="name" placeholder="Your name" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="join-phone">WhatsApp number</label>
+        <input type="tel" id="join-phone" name="phone" placeholder="+91 98765 43210" autocomplete="tel" required>
+      </div>
+      <button type="submit" class="btn btn-primary form-submit">Join the group</button>
+      <p class="form-note" id="join-note" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</div>
+
+<div class="chat" id="chat">
+  <section class="chat-panel" id="chat-panel" role="dialog" aria-label="Chat with Ilactic" aria-hidden="true" inert>
+    <header class="chat-head">
+      <span class="chat-avatar" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><use href="#bot-face"/></svg>
+      </span>
+      <div class="chat-title">
+        <strong>Ilactic assistant</strong>
+        <span>Ask about our products</span>
+      </div>
+      <button type="button" class="chat-close" id="chat-close" aria-label="Close chat">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+
+    <div class="chat-log" id="chat-log" role="log" aria-live="polite">
+      <p class="chat-msg chat-msg-bot">Hi, I'm the Ilactic assistant. What are you trying to automate?</p>
+    </div>
+
+    <form class="chat-form" id="chat-form" autocomplete="off">
+      <label class="visually-hidden" for="chat-input">Your message</label>
+      <input type="text" id="chat-input" placeholder="Type a message" required>
+      <button type="submit" class="chat-send" aria-label="Send message">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 3.5L13.5 8 9 12.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </button>
+    </form>
+  </section>
+
+  <button type="button" class="chat-launcher" id="chat-launcher" aria-label="Chat with Ilactic" aria-expanded="false" aria-controls="chat-panel">
+    <span class="chat-bot">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><use href="#bot-face"/></svg>
+    </span>
+  </button>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="bot-face" viewBox="0 0 48 48">
+    <path class="bf-stroke" d="M24 10V5" stroke-width="2" stroke-linecap="round"/>
+    <circle class="bf-tip" cx="24" cy="4.5" r="2.6"/>
+    <rect class="bf-line" x="2.5" y="20" width="4" height="10" rx="2"/>
+    <rect class="bf-line" x="41.5" y="20" width="4" height="10" rx="2"/>
+    <rect class="bf-body" x="6" y="10" width="36" height="30" rx="11"/>
+    <rect class="bf-visor" x="11" y="16" width="26" height="18" rx="8"/>
+    <circle class="bf-eye" cx="19" cy="25" r="2.8"/>
+    <circle class="bf-eye" cx="29" cy="25" r="2.8"/>
+  </symbol>
+</svg>
+
+<script src="js/script.js?v=11"></script>
+<script type="module" src="js/hero-particles.js?v=13"></script>
+<script type="module" src="js/catalog-orbs.js?v=1"></script>
+</body>
+</html>
